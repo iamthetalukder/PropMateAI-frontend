@@ -6,6 +6,38 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  const handleLogin = async () => {
+    try {
+      const res = await fetch(
+        ${process.env.NEXT_PUBLIC_API_URL}/api/auth/login,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email, password }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (res.ok) {
+        alert("Login successful ✅");
+
+        // Save token
+        localStorage.setItem("token", data.token);
+
+        // Redirect to dashboard
+        window.location.href = "/dashboard";
+      } else {
+        alert(data.message || "Login failed ❌");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Server error ❌");
+    }
+  };
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-950 text-white">
       <div className="w-full max-w-md rounded-2xl bg-zinc-900 p-8 shadow-xl">
@@ -29,14 +61,12 @@ export default function LoginPage() {
           onChange={(e) => setPassword(e.target.value)}
         />
 
-        <button className="w-full rounded-lg bg-blue-600 p-3 font-semibold hover:bg-blue-700">
+        <button
+          onClick={handleLogin}
+          className="w-full rounded-lg bg-blue-600 p-3 font-semibold hover:bg-blue-700"
+        >
           Login
         </button>
-
-        <p className="mt-4 text-center text-sm text-zinc-400">
-          Don't have an account?{" "}
-          <span className="text-blue-500 cursor-pointer">Register</span>
-        </p>
       </div>
     </div>
   );
