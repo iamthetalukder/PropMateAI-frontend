@@ -35,16 +35,16 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950 text-white">
-      <div className="w-full max-w-md rounded-2xl bg-zinc-900 p-8 shadow-xl">
-        <h1 className="mb-6 text-center text-2xl font-bold">
+    <div className="flex min-h-screen items-center justify-center bg-zinc-100 px-4 text-black dark:bg-zinc-950 dark:text-white">
+      <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-8 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+        <h1 className="mb-6 text-center text-2xl font-bold text-blue-600">
           Login to PropMate AI
         </h1>
 
         <input
           type="email"
           placeholder="Email"
-          className="mb-4 w-full rounded-lg border border-zinc-700 bg-zinc-800 p-3 outline-none focus:border-blue-500"
+          className="mb-4 w-full rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
@@ -52,19 +52,19 @@ export default function LoginPage() {
         <input
           type="password"
           placeholder="Password"
-          className="mb-6 w-full rounded-lg border border-zinc-700 bg-zinc-800 p-3 outline-none focus:border-blue-500"
+          className="mb-6 w-full rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
 
         <button
           onClick={handleLogin}
-          className="w-full rounded-lg bg-blue-600 p-3 font-semibold hover:bg-blue-700"
+          className="w-full rounded-lg bg-blue-600 p-3 font-semibold text-white hover:bg-blue-700"
         >
           Login
         </button>
 
-        <p className="mt-4 text-center text-sm text-zinc-400">
+        <p className="mt-4 text-center text-sm text-zinc-500 dark:text-zinc-400">
           Don&apos;t have an account?{" "}
           <a href="/register" className="cursor-pointer text-blue-500">
             Register
