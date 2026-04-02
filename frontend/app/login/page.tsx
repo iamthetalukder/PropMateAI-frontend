@@ -9,26 +9,22 @@ export default function LoginPage() {
   const handleLogin = async () => {
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/login`,
+        ${process.env.NEXT_PUBLIC_API_URL}/api/auth/login,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ email, password }),
-        },
+        }
       );
 
       const data = await res.json();
 
       if (res.ok) {
-        alert("Login successful ✅");
-
-        // Save token
         localStorage.setItem("token", data.token);
-
-        // Redirect to dashboard
-        window.location.href = "/dashboard";
+        alert("Login successful ✅");
+        window.location.href = "/";
       } else {
         alert(data.message || "Login failed ❌");
       }
@@ -67,6 +63,13 @@ export default function LoginPage() {
         >
           Login
         </button>
+
+        <p className="mt-4 text-center text-sm text-zinc-400">
+          Don&apos;t have an account?{" "}
+          <a href="/register" className="cursor-pointer text-blue-500">
+            Register
+          </a>
+        </p>
       </div>
     </div>
   );
