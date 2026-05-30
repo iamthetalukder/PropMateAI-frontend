@@ -10,3 +10,5 @@ backend/node_modules
 frontend/.next
 backend/.env
 frontend/.env
+backend/uploads/*
+!backend/uploads/.gitkeep

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import AnalyticsSection from "../components/AnalyticsSection";
 
 type Property = {
   _id: string;
@@ -16,15 +17,14 @@ type Property = {
   currency?: string;
   status: "occupied" | "vacant";
   images?: string[];
+  createdAt?: string;
 };
 
 export default function DashboardPage() {
   const router = useRouter();
-
   const [loading, setLoading] = useState(true);
   const [properties, setProperties] = useState<Property[]>([]);
   const [userName, setUserName] = useState("");
-
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
   const [address, setAddress] = useState("");
@@ -34,93 +34,94 @@ export default function DashboardPage() {
   const [currency, setCurrency] = useState("USD");
   const [status, setStatus] = useState<"occupied" | "vacant">("vacant");
   const [images, setImages] = useState<FileList | null>(null);
-
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
-
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
+
+  const showNotification = (message: string, type: "success" | "error") => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
+  };
 
   const fetchProperties = async (token: string) => {
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/properties`,
+        process.env.NEXT_PUBLIC_API_URL + "/api/properties",
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: "Bearer " + token },
+          signal: controller.signal,
         },
       );
-
-      if (!res.ok) {
-        throw new Error("Failed to fetch properties");
-      }
-
+      clearTimeout(timeout);
+      if (!res.ok) throw new Error("Failed to fetch properties");
       const data = await res.json();
       setProperties(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Fetch properties error:", err);
+      setProperties([]);
     }
   };
 
   const getCoordinates = async () => {
-    const fullAddress = [address, city, country].filter(Boolean).join(", ");
-
-    if (!fullAddress.trim()) {
-      return null;
-    }
-
+    const parts = [address, city, country].filter(Boolean);
+    const fullAddress = parts.join(", ");
+    if (!fullAddress.trim()) return null;
     try {
       const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          fullAddress,
-        )}`,
-        {
-          headers: {
-            Accept: "application/json",
-          },
-        },
+        "https://nominatim.openstreetmap.org/search?format=json&q=" +
+          encodeURIComponent(fullAddress),
+        { headers: { Accept: "application/json" } },
       );
-
-      if (!res.ok) {
-        throw new Error("Failed to fetch coordinates");
-      }
-
+      if (!res.ok) return null;
       const data = await res.json();
-
       if (Array.isArray(data) && data.length > 0) {
-        return {
-          lat: data[0].lat,
-          lon: data[0].lon,
-        };
+        return { lat: data[0].lat, lon: data[0].lon };
       }
-
       return null;
-    } catch (error) {
-      console.error("Location error:", error);
+    } catch {
       return null;
     }
   };
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-
     if (!token) {
       router.push("/login");
       return;
     }
-
     try {
       const decoded: any = JSON.parse(atob(token.split(".")[1]));
       setUserName(decoded.name || "User");
-    } catch (error) {
-      console.error("Token decode error:", error);
+    } catch {
       setUserName("User");
     }
-
     fetchProperties(token).finally(() => setLoading(false));
   }, [router]);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    if (files.length > 20) {
+      showNotification("Maximum 20 images allowed", "error");
+      return;
+    }
+    setImages(files);
+    const urls: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      urls.push(URL.createObjectURL(files[i]));
+    }
+    setPreviewUrls(urls);
+  };
 
   const resetForm = () => {
     setTitle("");
@@ -132,6 +133,7 @@ export default function DashboardPage() {
     setCurrency("USD");
     setStatus("vacant");
     setImages(null);
+    setPreviewUrls([]);
     setEditingId(null);
   };
 
@@ -142,33 +144,19 @@ export default function DashboardPage() {
 
   const handleAddOrUpdateProperty = async () => {
     const token = localStorage.getItem("token");
-
     if (!token) {
       router.push("/login");
       return;
     }
-
     if (!title.trim() || !location.trim() || !price.trim()) {
-      alert("Please fill title, location, and price");
+      showNotification("Please fill title, location, and price", "error");
       return;
     }
-
     try {
       setSubmitting(true);
-
-      const coords = await getCoordinates();
-
-      if (!coords && (address.trim() || city.trim() || country.trim())) {
-        alert(
-          "Could not detect location. Please check address, city, or country.",
-        );
-        setSubmitting(false);
-        return;
-      }
-
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       if (editingId) {
         const formData = new FormData();
-        // Note: we no longer append "id" here — the backend reads it from req.params.id.
         formData.append("title", title);
         formData.append("location", location);
         formData.append("address", address);
@@ -177,41 +165,37 @@ export default function DashboardPage() {
         formData.append("price", price);
         formData.append("currency", currency);
         formData.append("status", status);
-
+        const coords = await getCoordinates();
         if (coords) {
           formData.append("latitude", coords.lat);
           formData.append("longitude", coords.lon);
         }
-
         if (images) {
           for (let i = 0; i < images.length; i++) {
             formData.append("images", images[i]);
           }
         }
-
-        // Backend route is defined as PUT /api/properties/:id
-        // — must include the editingId in the URL path, not just the body.
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/properties/${editingId}`,
-          {
-            method: "PUT",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            body: formData,
-          },
-        );
-
+        const res = await fetch(apiUrl + "/api/properties/" + editingId, {
+          method: "PUT",
+          headers: { Authorization: "Bearer " + token },
+          body: formData,
+        });
         const data = await res.json();
-
-        if (!res.ok) {
+        if (!res.ok)
           throw new Error(data.message || "Failed to update property");
-        }
-
         await fetchProperties(token);
         resetForm();
-        alert("Property updated successfully");
+        showNotification("Property updated successfully!", "success");
       } else {
+        const coords = await getCoordinates();
+        if (!coords && (address.trim() || city.trim() || country.trim())) {
+          showNotification(
+            "Could not detect location. Check address, city, or country.",
+            "error",
+          );
+          setSubmitting(false);
+          return;
+        }
         const formData = new FormData();
         formData.append("title", title);
         formData.append("location", location);
@@ -221,42 +205,28 @@ export default function DashboardPage() {
         formData.append("price", price);
         formData.append("currency", currency);
         formData.append("status", status);
-
         if (coords) {
           formData.append("latitude", coords.lat);
           formData.append("longitude", coords.lon);
         }
-
         if (images) {
           for (let i = 0; i < images.length; i++) {
             formData.append("images", images[i]);
           }
         }
-
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/properties`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            body: formData,
-          },
-        );
-
+        const res = await fetch(apiUrl + "/api/properties", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + token },
+          body: formData,
+        });
         const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(data.message || "Failed to add property");
-        }
-
+        if (!res.ok) throw new Error(data.message || "Failed to add property");
         await fetchProperties(token);
         resetForm();
-        alert("Property added successfully");
+        showNotification("Property added successfully!", "success");
       }
     } catch (error: any) {
-      console.error("Save property error:", error);
-      alert(error.message || "Failed to save property");
+      showNotification(error.message || "Failed to save property", "error");
     } finally {
       setSubmitting(false);
     }
@@ -273,57 +243,31 @@ export default function DashboardPage() {
     setCurrency(property.currency || "USD");
     setStatus(property.status || "vacant");
     setImages(null);
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  };
-
-  const handleCancelEdit = () => {
-    resetForm();
+    setPreviewUrls([]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleDeleteProperty = async (id: string) => {
     const token = localStorage.getItem("token");
-
     if (!token) {
       router.push("/login");
       return;
     }
-
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this property?",
-    );
-    if (!confirmed) return;
-
+    if (!window.confirm("Are you sure you want to delete this property?"))
+      return;
     try {
       setDeletingId(id);
-
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/properties/${id}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
+        process.env.NEXT_PUBLIC_API_URL + "/api/properties/" + id,
+        { method: "DELETE", headers: { Authorization: "Bearer " + token } },
       );
-
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || "Failed to delete property");
-      }
-
-      if (editingId === id) {
-        resetForm();
-      }
-
+      if (!res.ok) throw new Error(data.message || "Failed to delete property");
+      if (editingId === id) resetForm();
       await fetchProperties(token);
+      showNotification("Property deleted successfully!", "success");
     } catch (error: any) {
-      console.error("Delete property error:", error);
-      alert(error.message || "Failed to delete property");
+      showNotification(error.message || "Failed to delete property", "error");
     } finally {
       setDeletingId("");
     }
@@ -331,11 +275,9 @@ export default function DashboardPage() {
 
   const totalProperties = properties.length;
   const occupiedUnits = properties.filter(
-    (property) => property.status === "occupied",
+    (p) => p.status === "occupied",
   ).length;
-  const vacantUnits = properties.filter(
-    (property) => property.status === "vacant",
-  ).length;
+  const vacantUnits = properties.filter((p) => p.status === "vacant").length;
 
   const filteredProperties = properties.filter((property) => {
     const matchesSearch =
@@ -343,54 +285,82 @@ export default function DashboardPage() {
       property.location.toLowerCase().includes(search.toLowerCase()) ||
       (property.city || "").toLowerCase().includes(search.toLowerCase()) ||
       (property.country || "").toLowerCase().includes(search.toLowerCase());
-
-    const matchesFilter = filter === "all" || property.status === filter;
-
-    return matchesSearch && matchesFilter;
+    return matchesSearch && (filter === "all" || property.status === filter);
   });
 
-  const totalPortfolioValue = useMemo(() => {
-    return properties.reduce(
-      (sum, property) => sum + Number(property.price || 0),
-      0,
-    );
-  }, [properties]);
-
-  const highestPricedProperty = useMemo(() => {
-    if (properties.length === 0) return null;
-    return properties.reduce((max, current) =>
-      current.price > max.price ? current : max,
-    );
-  }, [properties]);
-
-  const vacancyRate = useMemo(() => {
-    if (totalProperties === 0) return 0;
-    return Math.round((vacantUnits / totalProperties) * 100);
-  }, [vacantUnits, totalProperties]);
-
+  const totalPortfolioValue = useMemo(
+    () => properties.reduce((sum, p) => sum + Number(p.price || 0), 0),
+    [properties],
+  );
+  const highestPricedProperty = useMemo(
+    () =>
+      properties.length === 0
+        ? null
+        : properties.reduce((max, c) => (c.price > max.price ? c : max)),
+    [properties],
+  );
+  const vacancyRate = useMemo(
+    () =>
+      totalProperties === 0
+        ? 0
+        : Math.round((vacantUnits / totalProperties) * 100),
+    [vacantUnits, totalProperties],
+  );
   const insightMessage = useMemo(() => {
-    if (properties.length === 0) {
+    if (properties.length === 0)
       return "Start by adding your first property to unlock insights.";
-    }
-    if (vacancyRate >= 50) {
+    if (vacancyRate >= 50)
       return "Vacancy is high. Focus on filling empty units to improve performance.";
-    }
-    if (occupiedUnits === totalProperties) {
+    if (occupiedUnits === totalProperties)
       return "Excellent — all your listed properties are occupied.";
-    }
     return "Your portfolio looks balanced. Keep monitoring vacancies and pricing.";
   }, [properties.length, vacancyRate, occupiedUnits, totalProperties]);
 
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-100 dark:bg-zinc-950 dark:text-white">
-        Loading...
+        <div className="text-center">
+          <div className="mb-4 text-4xl">⏳</div>
+          <p className="text-lg font-semibold">Loading your dashboard...</p>
+          <p className="mt-2 text-sm text-zinc-500">Connecting to database</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-zinc-100 px-6 py-10 text-black dark:bg-zinc-950 dark:text-white">
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90"
+          onClick={() => setLightboxImage(null)}
+        >
+          <button
+            className="absolute right-6 top-6 text-3xl text-white hover:text-zinc-300"
+            onClick={() => setLightboxImage(null)}
+          >
+            ✕
+          </button>
+          <img
+            src={lightboxImage}
+            alt="Preview"
+            className="max-h-screen max-w-5xl rounded-xl object-contain p-4"
+          />
+        </div>
+      )}
+
+      {notification && (
+        <div
+          className={
+            "fixed right-6 top-6 z-50 rounded-xl px-6 py-4 text-white shadow-2xl " +
+            (notification.type === "success" ? "bg-green-600" : "bg-red-600")
+          }
+        >
+          {notification.type === "success" ? "✅ " : "❌ "}
+          {notification.message}
+        </div>
+      )}
+
       <div className="mx-auto max-w-6xl">
         <div className="mb-8 flex items-center justify-between">
           <div>
@@ -399,16 +369,35 @@ export default function DashboardPage() {
             </p>
             <h1 className="text-3xl font-bold">Dashboard</h1>
             <p className="mt-2 text-zinc-500 dark:text-zinc-400">
-              Welcome back, {userName} 👋
+              Welcome back, {userName}
             </p>
           </div>
-
-          <button
-            onClick={handleLogout}
-            className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700"
-          >
-            Logout
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => router.push("/tenants")}
+              className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700"
+            >
+              Tenants
+            </button>
+            <button
+              onClick={() => router.push("/leases")}
+              className="rounded-lg bg-purple-600 px-4 py-2 font-semibold text-white hover:bg-purple-700"
+            >
+              Leases
+            </button>
+            <button
+              onClick={() => router.push("/maintenance")}
+              className="rounded-lg bg-amber-600 px-4 py-2 font-semibold text-white hover:bg-amber-700"
+            >
+              Maintenance
+            </button>
+            <button
+              onClick={handleLogout}
+              className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700"
+            >
+              Logout
+            </button>
+          </div>
         </div>
 
         <div className="grid gap-6 md:grid-cols-3">
@@ -418,14 +407,12 @@ export default function DashboardPage() {
               {totalProperties}
             </p>
           </div>
-
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
             <h2 className="text-lg font-semibold">Occupied Units</h2>
             <p className="mt-4 text-3xl font-bold text-green-500">
               {occupiedUnits}
             </p>
           </div>
-
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
             <h2 className="text-lg font-semibold">Vacant Units</h2>
             <p className="mt-4 text-3xl font-bold text-yellow-500">
@@ -438,10 +425,9 @@ export default function DashboardPage() {
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
             <h2 className="text-lg font-semibold">Portfolio Value</h2>
             <p className="mt-4 text-3xl font-bold text-purple-500">
-              {totalPortfolioValue}
+              {totalPortfolioValue.toLocaleString()}
             </p>
           </div>
-
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
             <h2 className="text-lg font-semibold">Highest Priced Property</h2>
             <p className="mt-4 text-lg font-bold text-emerald-500">
@@ -450,7 +436,6 @@ export default function DashboardPage() {
                 : "No data yet"}
             </p>
           </div>
-
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
             <h2 className="text-lg font-semibold">Vacancy Rate</h2>
             <p className="mt-4 text-3xl font-bold text-rose-500">
@@ -464,22 +449,23 @@ export default function DashboardPage() {
           <p className="text-zinc-600 dark:text-zinc-400">{insightMessage}</p>
         </div>
 
+        {/* ANALYTICS SECTION */}
+        <AnalyticsSection properties={properties} />
+
         <div className="mt-8 rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-bold">
               {editingId ? "Edit Property" : "Add Property"}
             </h2>
-
             {editingId && (
               <button
-                onClick={handleCancelEdit}
+                onClick={resetForm}
                 className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-semibold hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
               >
                 Cancel Edit
               </button>
             )}
           </div>
-
           <div className="grid gap-4 md:grid-cols-2">
             <input
               type="text"
@@ -488,7 +474,6 @@ export default function DashboardPage() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
-
             <input
               type="text"
               placeholder="Location"
@@ -496,7 +481,6 @@ export default function DashboardPage() {
               value={location}
               onChange={(e) => setLocation(e.target.value)}
             />
-
             <input
               type="text"
               placeholder="Full Address"
@@ -504,7 +488,6 @@ export default function DashboardPage() {
               value={address}
               onChange={(e) => setAddress(e.target.value)}
             />
-
             <input
               type="text"
               placeholder="City"
@@ -512,7 +495,6 @@ export default function DashboardPage() {
               value={city}
               onChange={(e) => setCity(e.target.value)}
             />
-
             <input
               type="text"
               placeholder="Country"
@@ -520,7 +502,6 @@ export default function DashboardPage() {
               value={country}
               onChange={(e) => setCountry(e.target.value)}
             />
-
             <input
               type="number"
               placeholder="Price"
@@ -528,15 +509,16 @@ export default function DashboardPage() {
               value={price}
               onChange={(e) => setPrice(e.target.value)}
             />
-
-            <input
-              type="text"
-              placeholder="Currency"
+            <select
               className="rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
-            />
-
+            >
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+              <option value="TRY">TRY</option>
+              <option value="BDT">BDT</option>
+            </select>
             <select
               className="rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
               value={status}
@@ -547,26 +529,50 @@ export default function DashboardPage() {
               <option value="vacant">Vacant</option>
               <option value="occupied">Occupied</option>
             </select>
+          </div>
 
+          <div className="mt-4">
+            <label className="mb-2 block text-sm font-semibold text-zinc-600 dark:text-zinc-400">
+              {editingId
+                ? "Upload new images to replace existing ones (max 20)"
+                : "Upload property images (max 20)"}
+            </label>
             <input
               type="file"
               multiple
               accept="image/*"
-              className="rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-white md:col-span-2"
-              onChange={(e) => setImages(e.target.files)}
+              className="w-full rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+              onChange={handleImageChange}
             />
+            {previewUrls.length > 0 && (
+              <div className="mt-4">
+                <p className="mb-2 text-sm font-semibold text-zinc-600 dark:text-zinc-400">
+                  {previewUrls.length} image{previewUrls.length > 1 ? "s" : ""}{" "}
+                  selected — preview:
+                </p>
+                <div className="grid grid-cols-4 gap-3 sm:grid-cols-6 md:grid-cols-8">
+                  {previewUrls.map((url, index) => (
+                    <div key={index} className="relative">
+                      <img
+                        src={url}
+                        alt={"Preview " + (index + 1)}
+                        className="h-20 w-full cursor-pointer rounded-lg border border-zinc-300 object-cover dark:border-zinc-600 hover:opacity-80 transition"
+                        onClick={() => setLightboxImage(url)}
+                      />
+                      <span className="absolute bottom-1 right-1 rounded bg-black bg-opacity-60 px-1 text-xs text-white">
+                        {index + 1}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-
-          <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
-            {editingId
-              ? "Upload new image(s) only if you want to replace the existing images."
-              : "You can upload multiple images for a new property."}
-          </p>
 
           <button
             onClick={handleAddOrUpdateProperty}
             disabled={submitting}
-            className="mt-4 rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+            className="mt-6 rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
           >
             {submitting
               ? editingId
@@ -581,7 +587,6 @@ export default function DashboardPage() {
         <div className="mt-8 rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <h2 className="text-xl font-bold">Recent Properties</h2>
-
             <div className="flex flex-col gap-3 md:flex-row">
               <input
                 type="text"
@@ -590,7 +595,6 @@ export default function DashboardPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
-
               <select
                 className="rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
                 value={filter}
@@ -608,99 +612,144 @@ export default function DashboardPage() {
               No properties found yet.
             </p>
           ) : (
-            <div className="space-y-4">
-              {filteredProperties.map((property) => (
-                <div
-                  key={property._id}
-                  className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700"
-                >
-                  <div className="flex flex-col gap-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <h3 className="text-lg font-semibold">
-                          {property.title}
-                        </h3>
-                        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                          {property.location}
-                        </p>
-
-                        {(property.address ||
-                          property.city ||
-                          property.country) && (
-                          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                            {[property.address, property.city, property.country]
-                              .filter(Boolean)
-                              .join(", ")}
+            <div className="space-y-6">
+              {filteredProperties.map((property) => {
+                const mapsUrl =
+                  "https://www.google.com/maps?q=" +
+                  String(property.latitude) +
+                  "," +
+                  String(property.longitude);
+                const hasCoords =
+                  property.latitude != null && property.longitude != null;
+                const addressLine = [
+                  property.address,
+                  property.city,
+                  property.country,
+                ]
+                  .filter(Boolean)
+                  .join(", ");
+                const hasAddress = Boolean(
+                  property.address || property.city || property.country,
+                );
+                const imageCount = property.images ? property.images.length : 0;
+                return (
+                  <div
+                    key={property._id}
+                    className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700"
+                  >
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-semibold">
+                              {property.title}
+                            </h3>
+                            {imageCount > 0 && (
+                              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-600 dark:bg-blue-900 dark:text-blue-300">
+                                {imageCount} photo{imageCount > 1 ? "s" : ""}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                            {property.location}
                           </p>
-                        )}
-
-                        {property.latitude != null &&
-                          property.longitude != null && (
+                          {hasAddress && (
+                            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                              {addressLine}
+                            </p>
+                          )}
+                          {hasCoords && (
                             <a
-                              href={`https://www.google.com/maps?q=${property.latitude},${property.longitude}`}
+                              href={mapsUrl}
                               target="_blank"
                               rel="noreferrer"
                               className="mt-2 inline-block text-sm text-blue-500 underline"
                             >
-                              View on Map 📍
+                              View on Map
                             </a>
                           )}
-                      </div>
-
-                      <div className="text-sm">
-                        <p>
-                          <span className="font-semibold">Price:</span>{" "}
-                          {property.currency || "USD"} {property.price}
-                        </p>
-                        <p>
-                          <span className="font-semibold">Status:</span>{" "}
-                          <span
-                            className={
-                              property.status === "occupied"
-                                ? "font-semibold text-green-500"
-                                : "font-semibold text-yellow-500"
+                        </div>
+                        <div className="text-sm">
+                          <p>
+                            <span className="font-semibold">Price: </span>
+                            {(property.currency || "USD") +
+                              " " +
+                              Number(property.price).toLocaleString()}
+                          </p>
+                          <p>
+                            <span className="font-semibold">Status: </span>
+                            <span
+                              className={
+                                property.status === "occupied"
+                                  ? "font-semibold text-green-500"
+                                  : "font-semibold text-yellow-500"
+                              }
+                            >
+                              {property.status}
+                            </span>
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() =>
+                              router.push("/property/" + property._id)
                             }
+                            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                           >
-                            {property.status}
-                          </span>
-                        </p>
+                            View
+                          </button>
+                          <button
+                            onClick={() => handleEditProperty(property)}
+                            className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteProperty(property._id)}
+                            disabled={deletingId === property._id}
+                            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+                          >
+                            {deletingId === property._id
+                              ? "Deleting..."
+                              : "Delete"}
+                          </button>
+                        </div>
                       </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEditProperty(property)}
-                          className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
-                        >
-                          Edit
-                        </button>
-
-                        <button
-                          onClick={() => handleDeleteProperty(property._id)}
-                          disabled={deletingId === property._id}
-                          className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
-                        >
-                          {deletingId === property._id
-                            ? "Deleting..."
-                            : "Delete"}
-                        </button>
-                      </div>
+                      {property.images && property.images.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                          {property.images.map((image, index) => (
+                            <div
+                              key={index}
+                              className="relative group cursor-pointer"
+                              onClick={() =>
+                                setLightboxImage(
+                                  process.env.NEXT_PUBLIC_API_URL + image,
+                                )
+                              }
+                            >
+                              <img
+                                src={process.env.NEXT_PUBLIC_API_URL + image}
+                                alt={property.title + " " + (index + 1)}
+                                className="h-24 w-full rounded-lg border border-zinc-200 object-cover dark:border-zinc-700 group-hover:opacity-80 transition"
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black bg-opacity-0 group-hover:bg-opacity-30 transition">
+                                <span className="text-xl text-white opacity-0 group-hover:opacity-100 transition">
+                                  🔍
+                                </span>
+                              </div>
+                              {index === 0 && (
+                                <span className="absolute left-1 top-1 rounded bg-blue-600 px-1.5 py-0.5 text-xs font-bold text-white">
+                                  Main
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-
-                    {property.images && property.images.length > 0 && (
-                      <div className="flex flex-wrap gap-3">
-                        {property.images.map((image, index) => (
-                          <img
-                            key={index}
-                            src={`${process.env.NEXT_PUBLIC_API_URL}${image}`}
-                            alt={property.title}
-                            className="h-28 w-40 rounded-lg border border-zinc-300 object-cover dark:border-zinc-700"
-                          />
-                        ))}
-                      </div>
-                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

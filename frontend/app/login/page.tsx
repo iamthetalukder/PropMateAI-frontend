@@ -1,36 +1,42 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     try {
+      setLoading(true);
+
       const res = await fetch(
-        ${process.env.NEXT_PUBLIC_API_URL}/api/auth/login,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/login`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ email, password }),
-        }
+        },
       );
 
       const data = await res.json();
 
       if (res.ok) {
         localStorage.setItem("token", data.token);
-        alert("Login successful ✅");
-        window.location.href = "/";
+        router.push("/");
       } else {
-        alert(data.message || "Login failed ❌");
+        alert(data.message || "Login failed");
       }
     } catch (error) {
-      console.error(error);
-      alert("Server error ❌");
+      console.error("Login error:", error);
+      alert("Server error");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -59,9 +65,10 @@ export default function LoginPage() {
 
         <button
           onClick={handleLogin}
-          className="w-full rounded-lg bg-blue-600 p-3 font-semibold text-white hover:bg-blue-700"
+          disabled={loading}
+          className="w-full rounded-lg bg-blue-600 p-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
         >
-          Login
+          {loading ? "Logging in..." : "Login"}
         </button>
 
         <p className="mt-4 text-center text-sm text-zinc-500 dark:text-zinc-400">

@@ -4,11 +4,8 @@ import { useEffect, useState } from "react";
 
 export default function ThemeToggle() {
   const [dark, setDark] = useState(false);
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-
     const saved = localStorage.getItem("theme");
 
     if (saved === "dark") {
@@ -32,12 +29,10 @@ export default function ThemeToggle() {
     }
   };
 
-  if (!mounted) return null;
-
   return (
     <button
       onClick={toggleTheme}
-      className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
+      className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 transition"
     >
       {dark ? "Light Mode" : "Dark Mode"}
     </button>

@@ -51,8 +51,12 @@ router.post("/login", async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user._id, email: user.email },
-      "frictionlab_secret_key",
+      {
+        id: user._id,
+        name: user.name, // 👈 ADD THIS
+        email: user.email, // optional
+      },
+      process.env.JWT_SECRET,
       { expiresIn: "7d" },
     );
 
