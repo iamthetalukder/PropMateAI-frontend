@@ -15,6 +15,15 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    // Role controls what the user can see and do in the app
+    // admin: full system access + user management
+    // manager: manage their own properties, tenants, leases (default)
+    // tenant: read-only access to their own lease and maintenance info
+    role: {
+      type: String,
+      enum: ["admin", "manager", "tenant"],
+      default: "manager",
+    },
   },
   { timestamps: true },
 );

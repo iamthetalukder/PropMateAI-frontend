@@ -6,9 +6,10 @@ const authMiddleware = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
+// POST /api/auth/register — create a new user account
 router.post("/register", async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, role } = req.body;
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -17,10 +18,15 @@ router.post("/register", async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Only allow "manager" or "tenant" on self-registration — admin is set by an existing admin
+    const safeRole =
+      role === "tenant" ? "tenant" : "manager";
+
     const user = await User.create({
       name,
       email,
       password: hashedPassword,
+      role: safeRole,
     });
 
     res.status(201).json({
@@ -29,6 +35,7 @@ router.post("/register", async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
+        role: user.role,
       },
     });
   } catch (error) {
@@ -36,6 +43,7 @@ router.post("/register", async (req, res) => {
   }
 });
 
+// POST /api/auth/login — authenticate and return a JWT token
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -50,11 +58,13 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ message: "Invalid email or password" });
     }
 
+    // Role is included in the token so middleware can check it without a DB lookup
     const token = jwt.sign(
       {
         id: user._id,
-        name: user.name, // 👈 ADD THIS
-        email: user.email, // optional
+        name: user.name,
+        email: user.email,
+        role: user.role,
       },
       process.env.JWT_SECRET,
       { expiresIn: "7d" },
@@ -67,6 +77,7 @@ router.post("/login", async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
+        role: user.role,
       },
     });
   } catch (error) {
@@ -74,6 +85,7 @@ router.post("/login", async (req, res) => {
   }
 });
 
+// GET /api/auth/me — return the current user's profile
 router.get("/me", authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("-password");

@@ -3,26 +3,46 @@ const fs = require("fs");
 const path = require("path");
 const Property = require("../models/Property");
 const authMiddleware = require("../middleware/authMiddleware");
-const upload = require("../middleware/uploadMiddleware");
+const diskUpload = require("../middleware/uploadMiddleware");
+const {
+  upload: cloudUpload,
+  uploadToCloudinary,
+  deleteFromCloudinary,
+  isCloudinaryEnabled,
+} = require("../middleware/cloudinaryUpload");
 
 const router = express.Router();
 
-// Helper: delete image files from disk
-const deleteImages = (imagePaths) => {
+// ── Image helpers ────────────────────────────────────────────────────────────
+
+// Delete images — calls Cloudinary or local disk depending on env
+const deleteImages = async (imagePaths) => {
   if (!imagePaths || imagePaths.length === 0) return;
-  imagePaths.forEach((imgPath) => {
-    const fullPath = path.join(__dirname, "..", imgPath);
-    fs.unlink(fullPath, (err) => {
-      if (err && err.code !== "ENOENT") {
-        console.error("Image delete failed:", fullPath, err.message);
-      }
-    });
-  });
+
+  for (const imgPath of imagePaths) {
+    if (imgPath.startsWith("http")) {
+      // Cloudinary URL
+      await deleteFromCloudinary(imgPath);
+    } else {
+      // Local disk path like "/uploads/filename.jpg"
+      const fullPath = path.join(__dirname, "..", imgPath);
+      fs.unlink(fullPath, (err) => {
+        if (err && err.code !== "ENOENT") {
+          console.error("Image delete failed:", fullPath, err.message);
+        }
+      });
+    }
+  }
 };
 
-// Multer wrapper — returns JSON errors instead of HTML
+// Choose the right multer middleware based on whether Cloudinary is configured
+const multerMiddleware = isCloudinaryEnabled
+  ? cloudUpload.array("images", 20)
+  : diskUpload.array("images", 20);
+
+// Wraps multer so it returns JSON errors instead of HTML
 const uploadMiddleware = (req, res, next) => {
-  upload.array("images", 20)(req, res, (err) => {
+  multerMiddleware(req, res, (err) => {
     if (err) {
       console.error("Upload error:", err.message);
       return res
@@ -32,6 +52,22 @@ const uploadMiddleware = (req, res, next) => {
     next();
   });
 };
+
+// After multer, upload buffered files to Cloudinary (only in Cloudinary mode)
+const processUploads = async (req) => {
+  if (!isCloudinaryEnabled || !req.files || req.files.length === 0) {
+    return req.files
+      ? req.files.map((f) => "/uploads/" + f.filename)
+      : [];
+  }
+
+  const urls = await Promise.all(
+    req.files.map((f) => uploadToCloudinary(f.buffer, "propmate")),
+  );
+  return urls;
+};
+
+// ── Routes ───────────────────────────────────────────────────────────────────
 
 // POST - Create property
 router.post("/", authMiddleware, uploadMiddleware, async (req, res) => {
@@ -55,9 +91,7 @@ router.post("/", authMiddleware, uploadMiddleware, async (req, res) => {
         .json({ message: "Please fill title, location, and price" });
     }
 
-    const imagePaths = req.files
-      ? req.files.map((file) => "/uploads/" + file.filename)
-      : [];
+    const imagePaths = await processUploads(req);
 
     const property = await Property.create({
       title,
@@ -129,8 +163,8 @@ router.put("/:id", authMiddleware, uploadMiddleware, async (req, res) => {
     property.status = status ?? property.status;
 
     if (req.files && req.files.length > 0) {
-      deleteImages(property.images);
-      property.images = req.files.map((file) => "/uploads/" + file.filename);
+      await deleteImages(property.images);
+      property.images = await processUploads(req);
     }
 
     const updatedProperty = await property.save();
@@ -141,7 +175,7 @@ router.put("/:id", authMiddleware, uploadMiddleware, async (req, res) => {
   }
 });
 
-// DELETE - Delete property
+// DELETE - Delete property and its images
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {
     const property = await Property.findOne({
@@ -153,7 +187,7 @@ router.delete("/:id", authMiddleware, async (req, res) => {
       return res.status(404).json({ message: "Property not found" });
     }
 
-    deleteImages(property.images);
+    await deleteImages(property.images);
     await Property.deleteOne({ _id: req.params.id });
     res.json({ message: "Property deleted successfully" });
   } catch (error) {

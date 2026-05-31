@@ -25,6 +25,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [properties, setProperties] = useState<Property[]>([]);
   const [userName, setUserName] = useState("");
+  const [userRole, setUserRole] = useState<string>("manager");
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
   const [address, setAddress] = useState("");
@@ -100,8 +101,11 @@ export default function DashboardPage() {
       return;
     }
     try {
-      const decoded: any = JSON.parse(atob(token.split(".")[1]));
+      const decoded: { name?: string; role?: string } = JSON.parse(
+        atob(token.split(".")[1]),
+      );
       setUserName(decoded.name || "User");
+      setUserRole(decoded.role || "manager");
     } catch {
       setUserName("User");
     }
@@ -372,7 +376,7 @@ export default function DashboardPage() {
               Welcome back, {userName}
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => router.push("/tenants")}
               className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700"
@@ -391,6 +395,20 @@ export default function DashboardPage() {
             >
               Maintenance
             </button>
+            <button
+              onClick={() => router.push("/ai")}
+              className="rounded-lg bg-violet-600 px-4 py-2 font-semibold text-white hover:bg-violet-700"
+            >
+              AI Features
+            </button>
+            {userRole === "admin" && (
+              <button
+                onClick={() => router.push("/admin")}
+                className="rounded-lg bg-rose-600 px-4 py-2 font-semibold text-white hover:bg-rose-700"
+              >
+                Admin
+              </button>
+            )}
             <button
               onClick={handleLogout}
               className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700"
@@ -723,12 +741,18 @@ export default function DashboardPage() {
                               className="relative group cursor-pointer"
                               onClick={() =>
                                 setLightboxImage(
-                                  process.env.NEXT_PUBLIC_API_URL + image,
+                                  image.startsWith("http")
+                                    ? image
+                                    : process.env.NEXT_PUBLIC_API_URL + image,
                                 )
                               }
                             >
                               <img
-                                src={process.env.NEXT_PUBLIC_API_URL + image}
+                                src={
+                                    image.startsWith("http")
+                                      ? image
+                                      : process.env.NEXT_PUBLIC_API_URL + image
+                                  }
                                 alt={property.title + " " + (index + 1)}
                                 className="h-24 w-full rounded-lg border border-zinc-200 object-cover dark:border-zinc-700 group-hover:opacity-80 transition"
                               />
