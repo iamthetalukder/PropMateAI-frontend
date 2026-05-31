@@ -6,6 +6,11 @@ require("dotenv").config();
 
 const authRoutes = require("./routes/authRoutes");
 const propertyRoutes = require("./routes/propertyRoutes");
+const tenantRoutes = require("./routes/tenantRoutes");
+const leaseRoutes = require("./routes/leaseRoutes");
+const maintenanceRoutes = require("./routes/maintenanceRoutes");
+const aiRoutes = require("./routes/aiRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 
@@ -31,6 +36,11 @@ app.get("/", (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/properties", propertyRoutes);
+app.use("/api/tenants", tenantRoutes);
+app.use("/api/leases", leaseRoutes);
+app.use("/api/maintenance", maintenanceRoutes);
+app.use("/api/ai", aiRoutes);
+app.use("/api/admin", adminRoutes);
 
 mongoose
   .connect(process.env.MONGO_URI)
