@@ -19,50 +19,21 @@ type Property = {
   createdAt?: string;
 };
 
-type Tenant = {
-  _id: string;
-  name: string;
-  email: string;
-  phone: string;
-  rentAmount: number;
-  leaseStart: string;
-  leaseEnd: string;
-};
-
-type Lease = {
-  _id: string;
-  tenantId: { _id: string; name: string; email: string } | null;
-  startDate: string;
-  endDate: string;
-  rentAmount: number;
-  currency: string;
-  status: "active" | "upcoming" | "expired" | "terminated";
-  notes: string;
-};
-
-type MaintenanceRequest = {
-  _id: string;
-  title: string;
-  description: string;
-  tenantId: { _id: string; name: string } | null;
-  priority: "low" | "medium" | "high" | "urgent";
-  status: "open" | "in-progress" | "resolved" | "closed";
-  category: string;
-  createdAt?: string;
-};
-
 export default function PropertyDetailPage() {
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
 
   const [property, setProperty] = useState<Property | null>(null);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [leases, setLeases] = useState<Lease[]>([]);
-  const [maintenanceRequests, setMaintenanceRequests] = useState<MaintenanceRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState(0);
   const [lightbox, setLightbox] = useState(false);
+
+  const getImageUrl = (imagePath: string) => {
+    if (!imagePath) return "";
+    if (imagePath.startsWith("http")) return imagePath;
+    return process.env.NEXT_PUBLIC_API_URL + imagePath;
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -74,36 +45,16 @@ export default function PropertyDetailPage() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
 
-    // Fetch properties, tenants, leases, and maintenance requests in parallel
-    Promise.all([
-      fetch(process.env.NEXT_PUBLIC_API_URL + "/api/properties", {
-        headers: { Authorization: "Bearer " + token },
-        signal: controller.signal,
-      }).then((res) => res.json()),
-      fetch(process.env.NEXT_PUBLIC_API_URL + "/api/tenants/property/" + id, {
-        headers: { Authorization: "Bearer " + token },
-      }).then((res) => res.json()),
-      fetch(process.env.NEXT_PUBLIC_API_URL + "/api/leases/property/" + id, {
-        headers: { Authorization: "Bearer " + token },
-      }).then((res) => res.json()),
-      fetch(process.env.NEXT_PUBLIC_API_URL + "/api/maintenance/property/" + id, {
-        headers: { Authorization: "Bearer " + token },
-      }).then((res) => res.json()),
-    ])
-      .then(([propertiesData, tenantsData, leasesData, maintenanceData]) => {
+    fetch(process.env.NEXT_PUBLIC_API_URL + "/api/properties", {
+      headers: { Authorization: "Bearer " + token },
+      signal: controller.signal,
+    })
+      .then((res) => res.json())
+      .then((data) => {
         clearTimeout(timeout);
-        if (Array.isArray(propertiesData)) {
-          const found = propertiesData.find((p: Property) => p._id === id);
+        if (Array.isArray(data)) {
+          const found = data.find((p: Property) => p._id === id);
           setProperty(found || null);
-        }
-        if (Array.isArray(tenantsData)) {
-          setTenants(tenantsData);
-        }
-        if (Array.isArray(leasesData)) {
-          setLeases(leasesData);
-        }
-        if (Array.isArray(maintenanceData)) {
-          setMaintenanceRequests(maintenanceData);
         }
       })
       .catch((err) => console.error("Fetch error:", err))
@@ -224,7 +175,7 @@ export default function PropertyDetailPage() {
             ‹
           </button>
           <img
-            src={process.env.NEXT_PUBLIC_API_URL + images[activeImage]}
+            src={getImageUrl(images[activeImage])}
             alt="Full view"
             className="max-h-screen max-w-5xl rounded-xl object-contain p-6"
           />
@@ -250,7 +201,7 @@ export default function PropertyDetailPage() {
             onClick={() => router.push("/")}
             className="flex items-center gap-2 rounded-lg border border-zinc-700 px-4 py-2 text-sm font-semibold hover:bg-zinc-800"
           >
-            ← Back to Dashboard
+            Back to Dashboard
           </button>
           <p className="text-sm uppercase tracking-widest text-blue-500">
             PropMate AI
@@ -296,7 +247,7 @@ export default function PropertyDetailPage() {
           <div className="mb-10">
             <div className="relative overflow-hidden rounded-2xl">
               <img
-                src={process.env.NEXT_PUBLIC_API_URL + images[activeImage]}
+                src={getImageUrl(images[activeImage])}
                 alt={property.title}
                 className="h-96 w-full cursor-pointer object-cover"
                 onClick={() => setLightbox(true)}
@@ -327,7 +278,7 @@ export default function PropertyDetailPage() {
                 {activeImage + 1} / {images.length}
               </div>
               <div className="absolute bottom-4 left-4 rounded-full bg-black bg-opacity-60 px-3 py-1 text-sm text-white">
-                🔍 Click to enlarge
+                Click to enlarge
               </div>
             </div>
 
@@ -336,7 +287,7 @@ export default function PropertyDetailPage() {
                 {images.map((img, index) => (
                   <img
                     key={index}
-                    src={process.env.NEXT_PUBLIC_API_URL + img}
+                    src={getImageUrl(img)}
                     alt={"Thumbnail " + (index + 1)}
                     onClick={() => setActiveImage(index)}
                     className={
@@ -471,150 +422,6 @@ export default function PropertyDetailPage() {
                 </div>
               )}
             </div>
-
-            {/* LEASE HISTORY */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-bold">Lease History</h2>
-                <button
-                  onClick={() => router.push("/leases")}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold hover:bg-blue-700"
-                >
-                  Manage Leases
-                </button>
-              </div>
-              {leases.length === 0 ? (
-                <p className="text-zinc-500">
-                  No leases recorded for this property.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {leases.map((lease) => {
-                    const statusColors: Record<string, string> = {
-                      active: "bg-green-900 text-green-400",
-                      upcoming: "bg-blue-900 text-blue-400",
-                      expired: "bg-red-900 text-red-400",
-                      terminated: "bg-zinc-700 text-zinc-400",
-                    };
-                    return (
-                      <div
-                        key={lease._id}
-                        className="rounded-xl border border-zinc-700 p-4"
-                      >
-                        <div className="mb-2 flex items-center justify-between">
-                          <p className="font-semibold">
-                            {lease.tenantId?.name || "Unknown Tenant"}
-                          </p>
-                          <span
-                            className={
-                              "rounded-full px-2.5 py-0.5 text-xs font-bold " +
-                              (statusColors[lease.status] || "")
-                            }
-                          >
-                            {lease.status.charAt(0).toUpperCase() +
-                              lease.status.slice(1)}
-                          </span>
-                        </div>
-                        <div className="grid gap-1 text-sm text-zinc-400 sm:grid-cols-2">
-                          <p>
-                            <span className="font-semibold text-white">
-                              Rent:{" "}
-                            </span>
-                            {(lease.currency || "USD")}{" "}
-                            {Number(lease.rentAmount).toLocaleString()} / mo
-                          </p>
-                          <p>
-                            <span className="font-semibold text-white">
-                              Term:{" "}
-                            </span>
-                            {formatDate(lease.startDate)} →{" "}
-                            {formatDate(lease.endDate)}
-                          </p>
-                          {lease.notes && (
-                            <p className="sm:col-span-2 text-zinc-500 italic">
-                              {lease.notes}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* MAINTENANCE REQUESTS */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-bold">Maintenance Requests</h2>
-                <button
-                  onClick={() => router.push("/maintenance")}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold hover:bg-blue-700"
-                >
-                  Manage
-                </button>
-              </div>
-              {maintenanceRequests.length === 0 ? (
-                <p className="text-zinc-500">
-                  No maintenance requests for this property.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {maintenanceRequests.map((req) => {
-                    const priorityColors: Record<string, string> = {
-                      low: "bg-zinc-700 text-zinc-300",
-                      medium: "bg-blue-900 text-blue-300",
-                      high: "bg-amber-900 text-amber-300",
-                      urgent: "bg-red-900 text-red-300",
-                    };
-                    const statusColors: Record<string, string> = {
-                      open: "bg-yellow-900 text-yellow-300",
-                      "in-progress": "bg-blue-900 text-blue-300",
-                      resolved: "bg-green-900 text-green-300",
-                      closed: "bg-zinc-700 text-zinc-400",
-                    };
-                    return (
-                      <div
-                        key={req._id}
-                        className="rounded-xl border border-zinc-700 p-4"
-                      >
-                        <div className="mb-2 flex flex-wrap items-center gap-2">
-                          <p className="font-semibold">{req.title}</p>
-                          <span
-                            className={
-                              "rounded-full px-2 py-0.5 text-xs font-bold " +
-                              (priorityColors[req.priority] || "")
-                            }
-                          >
-                            {req.priority.charAt(0).toUpperCase() +
-                              req.priority.slice(1)}
-                          </span>
-                          <span
-                            className={
-                              "rounded-full px-2 py-0.5 text-xs font-bold " +
-                              (statusColors[req.status] || "")
-                            }
-                          >
-                            {req.status === "in-progress"
-                              ? "In Progress"
-                              : req.status.charAt(0).toUpperCase() +
-                                req.status.slice(1)}
-                          </span>
-                        </div>
-                        <p className="text-sm text-zinc-400">
-                          {req.description}
-                        </p>
-                        {req.tenantId && (
-                          <p className="mt-1 text-xs text-zinc-500">
-                            Reported by: {req.tenantId.name}
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
           </div>
 
           {/* RIGHT SIDEBAR */}
@@ -658,70 +465,9 @@ export default function PropertyDetailPage() {
               </div>
             </div>
 
-            {/* TENANTS */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold">Tenants</h2>
-                <button
-                  onClick={() => router.push("/tenants")}
-                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
-                >
-                  Manage
-                </button>
-              </div>
-              {tenants.length === 0 ? (
-                <p className="text-sm text-zinc-500">
-                  No tenants linked to this property.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {tenants.map((tenant) => {
-                    const now = new Date();
-                    const isActive =
-                      new Date(tenant.leaseStart) <= now &&
-                      new Date(tenant.leaseEnd) >= now;
-                    return (
-                      <div
-                        key={tenant._id}
-                        className="rounded-xl bg-zinc-800 p-3"
-                      >
-                        <div className="mb-1 flex items-center justify-between">
-                          <p className="font-semibold">{tenant.name}</p>
-                          <span
-                            className={
-                              "rounded-full px-2 py-0.5 text-xs font-bold " +
-                              (isActive
-                                ? "bg-green-900 text-green-400"
-                                : "bg-red-900 text-red-400")
-                            }
-                          >
-                            {isActive ? "Active" : "Expired"}
-                          </span>
-                        </div>
-                        <p className="text-xs text-zinc-400">{tenant.email}</p>
-                        {tenant.phone && (
-                          <p className="text-xs text-zinc-400">{tenant.phone}</p>
-                        )}
-                        <p className="mt-1 text-xs text-zinc-400">
-                          Rent:{" "}
-                          <span className="font-semibold text-blue-400">
-                            {Number(tenant.rentAmount).toLocaleString()} / mo
-                          </span>
-                        </p>
-                        <p className="text-xs text-zinc-500">
-                          {formatDate(tenant.leaseStart)} →{" "}
-                          {formatDate(tenant.leaseEnd)}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
             {/* AI INSIGHTS */}
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <h2 className="mb-4 text-lg font-bold">🤖 AI Insights</h2>
+              <h2 className="mb-4 text-lg font-bold">AI Insights</h2>
               <div className="space-y-3">
                 {insights.map((insight, index) => (
                   <div key={index} className="rounded-xl bg-zinc-800 p-3">
@@ -741,13 +487,13 @@ export default function PropertyDetailPage() {
                   onClick={() => router.push("/")}
                   className="w-full rounded-lg bg-amber-500 px-4 py-3 font-semibold text-white hover:bg-amber-600"
                 >
-                  ✏️ Edit Property
+                  Edit Property
                 </button>
                 <button
                   onClick={() => router.push("/")}
                   className="w-full rounded-lg border border-zinc-700 px-4 py-3 font-semibold hover:bg-zinc-800"
                 >
-                  ← Back to Dashboard
+                  Back to Dashboard
                 </button>
               </div>
             </div>
