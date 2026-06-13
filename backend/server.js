@@ -11,6 +11,8 @@ const leaseRoutes = require("./routes/leaseRoutes");
 const maintenanceRoutes = require("./routes/maintenanceRoutes");
 const aiRoutes = require("./routes/aiRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const stripeRoutes = require("./routes/stripe");
+const stripeWebhookRoute = require("./routes/stripeWebhook");
 
 const app = express();
 
@@ -25,6 +27,9 @@ app.use(
     credentials: true,
   }),
 );
+
+// Webhook must be registered before express.json() to preserve the raw request body for Stripe signature verification
+app.use("/api/webhook", stripeWebhookRoute);
 
 app.use(express.json());
 
@@ -41,6 +46,7 @@ app.use("/api/leases", leaseRoutes);
 app.use("/api/maintenance", maintenanceRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/stripe", stripeRoutes);
 
 mongoose
   .connect(process.env.MONGO_URI)

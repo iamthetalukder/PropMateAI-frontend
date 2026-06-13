@@ -8,10 +8,14 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [emailNotVerified, setEmailNotVerified] = useState(false);
 
   const handleLogin = async () => {
     try {
       setLoading(true);
+      setError("");
+      setEmailNotVerified(false);
 
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/auth/login`,
@@ -29,12 +33,13 @@ export default function LoginPage() {
       if (res.ok) {
         localStorage.setItem("token", data.token);
         router.push("/");
+      } else if (data.emailNotVerified) {
+        setEmailNotVerified(true);
       } else {
-        alert(data.message || "Login failed");
+        setError(data.message || "Login failed");
       }
-    } catch (error) {
-      console.error("Login error:", error);
-      alert("Server error");
+    } catch {
+      setError("Server error. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -46,6 +51,23 @@ export default function LoginPage() {
         <h1 className="mb-6 text-center text-2xl font-bold text-blue-600">
           Login to PropMate AI
         </h1>
+
+        {error && (
+          <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
+            {error}
+          </p>
+        )}
+
+        {emailNotVerified && (
+          <div className="mb-4 rounded-lg border border-yellow-400 bg-yellow-50 p-4 dark:bg-yellow-900/20">
+            <p className="mb-1 text-sm font-semibold text-yellow-700 dark:text-yellow-400">
+              Email not verified
+            </p>
+            <p className="text-sm text-yellow-600 dark:text-yellow-300">
+              Please check your inbox and click the verification link we sent you before logging in.
+            </p>
+          </div>
+        )}
 
         <input
           type="email"

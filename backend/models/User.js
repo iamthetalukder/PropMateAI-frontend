@@ -24,6 +24,40 @@ const userSchema = new mongoose.Schema(
       enum: ["admin", "manager", "tenant"],
       default: "manager",
     },
+    isEmailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    emailVerificationToken: {
+      type: String,
+      default: null,
+    },
+    emailVerificationExpires: {
+      type: Date,
+      default: null,
+    },
+    plan: {
+      type: String,
+      enum: ["free", "pro", "agency"],
+      default: "free",
+    },
+    stripeCustomerId: {
+      type: String,
+      default: null,
+    },
+    stripeSubscriptionId: {
+      type: String,
+      default: null,
+    },
+    subscriptionStatus: {
+      type: String,
+      enum: ["active", "inactive", "canceled", "past_due"],
+      default: "inactive",
+    },
+    planExpiresAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true },
 );
