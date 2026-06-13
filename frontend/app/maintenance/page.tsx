@@ -3,6 +3,7 @@
 // Maintenance Requests page — log and track repair/issue tickets per property
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Logo from "@/components/Logo";
 
 type PropertyRef = { _id: string; title: string; location: string };
 type TenantRef = { _id: string; name: string; email: string };
@@ -313,10 +314,8 @@ export default function MaintenancePage() {
         {/* PAGE HEADER */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-blue-500">
-              PropMate AI
-            </p>
-            <h1 className="text-3xl font-bold">Maintenance Requests</h1>
+            <Logo theme="dark" size="md" />
+            <h1 className="mt-1 text-3xl font-bold">Maintenance Requests</h1>
             <p className="mt-2 text-zinc-500 dark:text-zinc-400">
               {requests.length} request{requests.length !== 1 ? "s" : ""} total
             </p>

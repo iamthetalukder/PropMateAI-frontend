@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AnalyticsSection from "../components/AnalyticsSection";
+import Logo from "@/components/Logo";
 
 type Property = {
   _id: string;
@@ -368,10 +369,8 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-6xl">
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-blue-500">
-              PropMate AI
-            </p>
-            <h1 className="text-3xl font-bold">Dashboard</h1>
+            <Logo theme="dark" size="md" />
+            <h1 className="mt-1 text-3xl font-bold">Dashboard</h1>
             <p className="mt-2 text-zinc-500 dark:text-zinc-400">
               Welcome back, {userName}
             </p>

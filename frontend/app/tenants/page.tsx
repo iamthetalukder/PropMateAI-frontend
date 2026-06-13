@@ -3,6 +3,7 @@
 // Tenant Management page — full CRUD for tenants, linked to properties
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Logo from "@/components/Logo";
 
 type Property = {
   _id: string;
@@ -275,10 +276,8 @@ export default function TenantsPage() {
         {/* PAGE HEADER */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-blue-500">
-              PropMate AI
-            </p>
-            <h1 className="text-3xl font-bold">Tenant Management</h1>
+            <Logo theme="dark" size="md" />
+            <h1 className="mt-1 text-3xl font-bold">Tenant Management</h1>
             <p className="mt-2 text-zinc-500 dark:text-zinc-400">
               {tenants.length} tenant{tenants.length !== 1 ? "s" : ""} total
             </p>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import Logo from "@/components/Logo";
 
 type VerifyState = "loading" | "success" | "error";
 
@@ -54,6 +55,10 @@ function VerifyEmailContent() {
         className="w-full max-w-md rounded-2xl border p-8 text-center"
         style={{ backgroundColor: "#111827", borderColor: "#1F2937" }}
       >
+        <div className="mb-6 flex justify-center">
+          <Logo theme="dark" size="lg" />
+        </div>
+
         {state === "loading" && (
           <>
             <div

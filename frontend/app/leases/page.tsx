@@ -3,6 +3,7 @@
 // Lease Management page — full CRUD for lease documents, linked to tenants and properties
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Logo from "@/components/Logo";
 
 type TenantRef = {
   _id: string;
@@ -309,10 +310,8 @@ export default function LeasesPage() {
         {/* PAGE HEADER */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-blue-500">
-              PropMate AI
-            </p>
-            <h1 className="text-3xl font-bold">Lease Management</h1>
+            <Logo theme="dark" size="md" />
+            <h1 className="mt-1 text-3xl font-bold">Lease Management</h1>
             <p className="mt-2 text-zinc-500 dark:text-zinc-400">
               {leases.length} lease{leases.length !== 1 ? "s" : ""} total
             </p>

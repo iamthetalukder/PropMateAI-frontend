@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Logo from "@/components/Logo";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -318,10 +319,8 @@ export default function AIPage() {
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-purple-500">
-              PropMate AI
-            </p>
-            <h1 className="text-3xl font-bold">AI Features</h1>
+            <Logo theme="dark" size="md" />
+            <h1 className="mt-1 text-3xl font-bold">AI Features</h1>
             <p className="mt-2 text-zinc-500 dark:text-zinc-400">
               Powered by GPT-4o-mini — intelligent insights for your portfolio
             </p>

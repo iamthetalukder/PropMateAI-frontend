@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
+import Logo from "@/components/Logo";
 
 type Property = {
   _id: string;
@@ -203,9 +204,7 @@ export default function PropertyDetailPage() {
           >
             Back to Dashboard
           </button>
-          <p className="text-sm uppercase tracking-widest text-blue-500">
-            PropMate AI
-          </p>
+          <Logo theme="dark" size="md" />
         </div>
       </div>
 

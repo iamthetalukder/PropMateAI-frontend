@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Logo from "@/components/Logo";
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
@@ -89,9 +90,9 @@ export default function RegisterPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-100 px-4 text-black dark:bg-zinc-950 dark:text-white">
       <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-8 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
-        <h1 className="mb-6 text-center text-2xl font-bold text-blue-600">
-          Create PropMate AI Account
-        </h1>
+        <div className="mb-6 flex justify-center">
+          <Logo theme="dark" size="lg" />
+        </div>
 
         {error && (
           <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
