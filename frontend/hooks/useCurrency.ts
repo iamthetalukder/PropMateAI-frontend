@@ -3,16 +3,31 @@
 import { useEffect, useState, useCallback } from "react";
 
 const STORAGE_KEY = "propmate_currency";
-const SUPPORTED = ["USD", "EUR", "GBP", "BDT", "CAD", "AUD"] as const;
-type Currency = (typeof SUPPORTED)[number];
 
-interface RatesMap {
-  EUR: number;
-  GBP: number;
-  BDT: number;
-  CAD: number;
-  AUD: number;
-}
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$",
+  EUR: "€",
+  GBP: "£",
+  AED: "د.إ",
+  TRY: "₺",
+  INR: "₹",
+  SGD: "S$",
+  MYR: "RM",
+  THB: "฿",
+  CHF: "Fr",
+  CAD: "CA$",
+  AUD: "A$",
+  BDT: "৳",
+  SAR: "﷼",
+  JPY: "¥",
+  HKD: "HK$",
+};
+
+const SUPPORTED_CODES = Object.keys(CURRENCY_SYMBOLS);
+
+type Currency = keyof typeof CURRENCY_SYMBOLS;
+
+type RatesMap = Record<string, number>;
 
 export function useCurrency() {
   const [currency, setCurrency] = useState<Currency>("USD");
@@ -21,7 +36,7 @@ export function useCurrency() {
   const readCurrency = useCallback((): Currency => {
     if (typeof window === "undefined") return "USD";
     const saved = localStorage.getItem(STORAGE_KEY) as Currency | null;
-    return saved && SUPPORTED.includes(saved) ? saved : "USD";
+    return saved && SUPPORTED_CODES.includes(saved) ? saved : "USD";
   }, []);
 
   useEffect(() => {
@@ -62,20 +77,19 @@ export function useCurrency() {
         return "$" + usdAmount.toLocaleString();
       }
 
-      const symbols: Record<string, string> = {
-        EUR: "€",
-        GBP: "£",
-        BDT: "৳",
-        CAD: "CA$",
-        AUD: "A$",
-      };
-
-      const rate = rates[currency as keyof RatesMap];
+      const rate = rates[currency];
       if (!rate) return "$" + usdAmount.toLocaleString();
 
       const converted = usdAmount * rate;
-      const symbol = symbols[currency] || currency + " ";
-      return symbol + converted.toLocaleString(undefined, { maximumFractionDigits: 0 });
+      const symbol = CURRENCY_SYMBOLS[currency] || currency + " ";
+
+      // JPY and similar non-decimal currencies look better without decimals
+      const maximumFractionDigits = currency === "JPY" ? 0 : 0;
+
+      return (
+        symbol +
+        converted.toLocaleString(undefined, { maximumFractionDigits })
+      );
     },
     [currency, rates],
   );

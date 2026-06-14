@@ -26,8 +26,24 @@ router.get("/rates", async (req, res) => {
       return res.status(502).json({ message: "Exchange rate fetch failed" });
     }
 
-    const { EUR, GBP, BDT, CAD, AUD } = data.conversion_rates;
-    cachedRates = { EUR, GBP, BDT, CAD, AUD };
+    const r = data.conversion_rates;
+    cachedRates = {
+      EUR: r.EUR,
+      GBP: r.GBP,
+      AED: r.AED,
+      TRY: r.TRY,
+      INR: r.INR,
+      SGD: r.SGD,
+      MYR: r.MYR,
+      THB: r.THB,
+      CHF: r.CHF,
+      CAD: r.CAD,
+      AUD: r.AUD,
+      BDT: r.BDT,
+      SAR: r.SAR,
+      JPY: r.JPY,
+      HKD: r.HKD,
+    };
     cacheExpiry = Date.now() + ONE_HOUR_MS;
 
     res.json({ rates: cachedRates, lastUpdated: new Date() });

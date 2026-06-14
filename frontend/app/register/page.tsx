@@ -23,9 +23,24 @@ export default function RegisterPage() {
         if (!res.ok) return;
         const data = await res.json();
         const countryCode: string = data.country || "";
-        let currency = "USD";
-        if (countryCode === "BD") currency = "BDT";
-        else if (countryCode === "GB") currency = "GBP";
+        const countryToCurrency: Record<string, string> = {
+          US: "USD",
+          GB: "GBP",
+          BD: "BDT",
+          AE: "AED",
+          TR: "TRY",
+          IN: "INR",
+          SG: "SGD",
+          MY: "MYR",
+          TH: "THB",
+          CH: "CHF",
+          CA: "CAD",
+          AU: "AUD",
+          SA: "SAR",
+          JP: "JPY",
+          HK: "HKD",
+        };
+        const currency = countryToCurrency[countryCode] || "USD";
         localStorage.setItem("propmate_currency", currency);
         window.dispatchEvent(new Event("currencyChange"));
         setDetectedCountry(data.country_name || countryCode || null);
