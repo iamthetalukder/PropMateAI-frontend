@@ -40,6 +40,13 @@ export default function AdminPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
+  // Email campaign state
+  const [campaignSubject, setCampaignSubject] = useState("");
+  const [campaignHtml, setCampaignHtml] = useState("");
+  const [campaignTarget, setCampaignTarget] = useState("all");
+  const [campaignSending, setCampaignSending] = useState(false);
+  const [campaignResult, setCampaignResult] = useState<string | null>(null);
+
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
   const showNotification = (message: string, type: "success" | "error") => {
@@ -179,6 +186,40 @@ export default function AdminPage() {
       showNotification(msg, "error");
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleSendCampaign = async () => {
+    const token = getToken();
+    if (!token) return;
+    if (!campaignSubject.trim() || !campaignHtml.trim()) {
+      showNotification("Subject and HTML content are required", "error");
+      return;
+    }
+    try {
+      setCampaignSending(true);
+      setCampaignResult(null);
+      const res = await fetch(apiUrl + "/api/mailchimp/send-announcement", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          subject: campaignSubject,
+          htmlContent: campaignHtml,
+          targetPlan: campaignTarget,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Campaign send failed");
+      setCampaignResult(data.campaignId || "sent");
+      showNotification("Campaign sent successfully!", "success");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Campaign send failed";
+      showNotification(msg, "error");
+    } finally {
+      setCampaignSending(false);
     }
   };
 
@@ -381,6 +422,51 @@ export default function AdminPage() {
               })}
             </div>
           )}
+        </div>
+
+        {/* Email Campaign */}
+        <div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
+          <h2 className="mb-4 text-xl font-bold">Email Campaign</h2>
+          <div className="grid gap-4">
+            <input
+              type="text"
+              placeholder="Campaign Subject"
+              value={campaignSubject}
+              onChange={(e) => setCampaignSubject(e.target.value)}
+              className="w-full rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-red-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+            />
+            <textarea
+              rows={6}
+              placeholder="HTML content for the email body..."
+              value={campaignHtml}
+              onChange={(e) => setCampaignHtml(e.target.value)}
+              className="w-full rounded-lg border border-zinc-300 bg-zinc-50 p-3 font-mono text-sm outline-none focus:border-red-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+            />
+            <select
+              value={campaignTarget}
+              onChange={(e) => setCampaignTarget(e.target.value)}
+              className="w-full rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-red-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+            >
+              <option value="all">All Users</option>
+              <option value="free">Free Plan</option>
+              <option value="pro">Pro Plan</option>
+              <option value="agency">Agency Plan</option>
+            </select>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={handleSendCampaign}
+                disabled={campaignSending}
+                className="rounded-lg bg-red-600 px-6 py-3 font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+              >
+                {campaignSending ? "Sending..." : "Send Campaign"}
+              </button>
+              {campaignResult && (
+                <p className="text-sm text-green-600 dark:text-green-400">
+                  Campaign ID: {campaignResult}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Role guide */}

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import ThemeToggle from "@/components/ThemeToggle";
+import CurrencySelector from "@/components/CurrencySelector";
 
 export const metadata: Metadata = {
   title: "PropMate AI",
@@ -21,7 +22,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="flex min-h-screen flex-col bg-white text-black dark:bg-zinc-950 dark:text-white transition-colors duration-300">
         {/* TOP BAR */}
-        <div className="flex justify-end px-4 pt-4">
+        <div className="flex items-center justify-end gap-3 px-4 pt-4">
+          <CurrencySelector />
           <ThemeToggle />
         </div>
 

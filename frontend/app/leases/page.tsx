@@ -68,6 +68,8 @@ export default function LeasesPage() {
   const [editingStatus, setEditingStatus] = useState<string>("active");
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState("");
+  const [downloadingPdf, setDownloadingPdf] = useState("");
+  const [downloadingReceipt, setDownloadingReceipt] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [search, setSearch] = useState("");
   const [notification, setNotification] = useState<{
@@ -243,6 +245,35 @@ export default function LeasesPage() {
       showNotification(error.message || "Failed to delete lease", "error");
     } finally {
       setDeletingId("");
+    }
+  };
+
+  const downloadBlob = async (
+    leaseId: string,
+    endpoint: "pdf" | "receipt",
+    filename: string,
+    setLoading: (id: string) => void,
+  ) => {
+    const token = localStorage.getItem("token");
+    if (!token) { router.push("/login"); return; }
+    try {
+      setLoading(leaseId);
+      const res = await fetch(
+        process.env.NEXT_PUBLIC_API_URL + "/api/leases/" + leaseId + "/" + endpoint,
+        { headers: { Authorization: "Bearer " + token } },
+      );
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      showNotification(err.message || "Download failed", "error");
+    } finally {
+      setLoading("");
     }
   };
 
@@ -641,7 +672,37 @@ export default function LeasesPage() {
                       </div>
 
                       {/* RIGHT: Actions */}
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          title="Download Lease PDF"
+                          onClick={() =>
+                            downloadBlob(
+                              lease._id,
+                              "pdf",
+                              "lease-" + lease._id + ".pdf",
+                              setDownloadingPdf,
+                            )
+                          }
+                          disabled={downloadingPdf === lease._id}
+                          className="rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+                        >
+                          {downloadingPdf === lease._id ? "..." : "📄 PDF"}
+                        </button>
+                        <button
+                          title="Download Rent Receipt"
+                          onClick={() =>
+                            downloadBlob(
+                              lease._id,
+                              "receipt",
+                              "receipt-" + lease._id + ".pdf",
+                              setDownloadingReceipt,
+                            )
+                          }
+                          disabled={downloadingReceipt === lease._id}
+                          className="rounded-lg bg-green-700 px-3 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-60"
+                        >
+                          {downloadingReceipt === lease._id ? "..." : "🧾 Receipt"}
+                        </button>
                         <button
                           onClick={() => handleEditLease(lease)}
                           className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"

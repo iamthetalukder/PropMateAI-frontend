@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AnalyticsSection from "../components/AnalyticsSection";
 import Logo from "@/components/Logo";
+import { useCurrency } from "@/hooks/useCurrency";
 
 type Property = {
   _id: string;
@@ -23,6 +24,7 @@ type Property = {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { formatAmount } = useCurrency();
   const [loading, setLoading] = useState(true);
   const [properties, setProperties] = useState<Property[]>([]);
   const [userName, setUserName] = useState("");
@@ -37,6 +39,11 @@ export default function DashboardPage() {
   const [status, setStatus] = useState<"occupied" | "vacant">("vacant");
   const [images, setImages] = useState<FileList | null>(null);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [stockPhotoUrls, setStockPhotoUrls] = useState<string[]>([]);
+  const [unsplashResults, setUnsplashResults] = useState<
+    { id: string; url: string; thumb: string; photographer: string }[]
+  >([]);
+  const [unsplashLoading, setUnsplashLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -128,6 +135,34 @@ export default function DashboardPage() {
     setPreviewUrls(urls);
   };
 
+  const fetchUnsplashPhotos = async (keyword: string) => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    try {
+      setUnsplashLoading(true);
+      const res = await fetch(
+        process.env.NEXT_PUBLIC_API_URL +
+          "/api/unsplash/search?query=" +
+          encodeURIComponent(keyword),
+        { headers: { Authorization: "Bearer " + token } },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setUnsplashResults(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.error("Unsplash fetch error:", err);
+    } finally {
+      setUnsplashLoading(false);
+    }
+  };
+
+  const toggleStockPhoto = (url: string) => {
+    setStockPhotoUrls((prev) =>
+      prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url],
+    );
+  };
+
   const resetForm = () => {
     setTitle("");
     setLocation("");
@@ -139,6 +174,8 @@ export default function DashboardPage() {
     setStatus("vacant");
     setImages(null);
     setPreviewUrls([]);
+    setStockPhotoUrls([]);
+    setUnsplashResults([]);
     setEditingId(null);
   };
 
@@ -170,6 +207,9 @@ export default function DashboardPage() {
         formData.append("price", price);
         formData.append("currency", currency);
         formData.append("status", status);
+        if (stockPhotoUrls.length > 0) {
+          formData.append("stockPhotoUrls", JSON.stringify(stockPhotoUrls));
+        }
         const coords = await getCoordinates();
         if (coords) {
           formData.append("latitude", coords.lat);
@@ -210,6 +250,9 @@ export default function DashboardPage() {
         formData.append("price", price);
         formData.append("currency", currency);
         formData.append("status", status);
+        if (stockPhotoUrls.length > 0) {
+          formData.append("stockPhotoUrls", JSON.stringify(stockPhotoUrls));
+        }
         if (coords) {
           formData.append("latitude", coords.lat);
           formData.append("longitude", coords.lon);
@@ -442,7 +485,7 @@ export default function DashboardPage() {
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
             <h2 className="text-lg font-semibold">Portfolio Value</h2>
             <p className="mt-4 text-3xl font-bold text-purple-500">
-              {totalPortfolioValue.toLocaleString()}
+              {formatAmount(totalPortfolioValue)}
             </p>
           </div>
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
@@ -586,6 +629,118 @@ export default function DashboardPage() {
             )}
           </div>
 
+          {/* UNSPLASH STOCK PHOTOS */}
+          <div
+            style={{
+              marginTop: "16px",
+              background: "#0F1A2E",
+              border: "1px solid #1A2D4A",
+              borderRadius: "12px",
+              padding: "16px",
+            }}
+          >
+            <p
+              style={{
+                color: "#8AB4D4",
+                fontSize: "13px",
+                fontWeight: 600,
+                marginBottom: "10px",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}
+            >
+              Or pick stock photos from Unsplash
+            </p>
+            <div style={{ display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
+              {["Modern Home", "Apartment", "Office Space"].map((kw) => (
+                <button
+                  key={kw}
+                  type="button"
+                  onClick={() => fetchUnsplashPhotos(kw)}
+                  style={{
+                    background: "#1A2D4A",
+                    color: "#FFFFFF",
+                    border: "1px solid #2A3D5A",
+                    borderRadius: "8px",
+                    padding: "6px 14px",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                  }}
+                >
+                  {kw}
+                </button>
+              ))}
+            </div>
+
+            {unsplashLoading && (
+              <p style={{ color: "#8AB4D4", fontSize: "13px" }}>Loading photos...</p>
+            )}
+
+            {unsplashResults.length > 0 && (
+              <>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    gap: "8px",
+                    marginBottom: "10px",
+                  }}
+                >
+                  {unsplashResults.slice(0, 9).map((photo) => {
+                    const selected = stockPhotoUrls.includes(photo.url);
+                    return (
+                      <div
+                        key={photo.id}
+                        onClick={() => toggleStockPhoto(photo.url)}
+                        style={{
+                          position: "relative",
+                          cursor: "pointer",
+                          borderRadius: "8px",
+                          overflow: "hidden",
+                          border: selected ? "2px solid #4A9EFF" : "2px solid transparent",
+                          transition: "border-color 0.15s",
+                        }}
+                      >
+                        <img
+                          src={photo.thumb}
+                          alt={photo.photographer}
+                          style={{ width: "100%", height: "80px", objectFit: "cover", display: "block" }}
+                        />
+                        {selected && (
+                          <div
+                            style={{
+                              position: "absolute",
+                              top: "4px",
+                              right: "4px",
+                              background: "#4A9EFF",
+                              borderRadius: "50%",
+                              width: "20px",
+                              height: "20px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: "11px",
+                              color: "#fff",
+                              fontWeight: 700,
+                            }}
+                          >
+                            ✓
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {stockPhotoUrls.length > 0 && (
+                  <p style={{ color: "#4A9EFF", fontSize: "13px" }}>
+                    {stockPhotoUrls.length} stock photo{stockPhotoUrls.length > 1 ? "s" : ""} selected
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+
           <button
             onClick={handleAddOrUpdateProperty}
             disabled={submitting}
@@ -689,9 +844,7 @@ export default function DashboardPage() {
                         <div className="text-sm">
                           <p>
                             <span className="font-semibold">Price: </span>
-                            {(property.currency || "USD") +
-                              " " +
-                              Number(property.price).toLocaleString()}
+                            {formatAmount(property.price)}
                           </p>
                           <p>
                             <span className="font-semibold">Status: </span>

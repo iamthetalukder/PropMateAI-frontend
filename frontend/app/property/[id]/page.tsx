@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Logo from "@/components/Logo";
+import PropertyMap from "@/components/PropertyMap";
+import WeatherWidget from "@/components/WeatherWidget";
 
 type Property = {
   _id: string;
@@ -103,15 +105,6 @@ export default function PropertyDetailPage() {
       day: "numeric",
     });
   };
-
-  const mapsEmbedUrl =
-    property && property.latitude && property.longitude
-      ? "https://maps.google.com/maps?q=" +
-        property.latitude +
-        "," +
-        property.longitude +
-        "&output=embed"
-      : null;
 
   const mapsLinkUrl =
     property && property.latitude && property.longitude
@@ -403,23 +396,13 @@ export default function PropertyDetailPage() {
                   </a>
                 )}
               </div>
-              {mapsEmbedUrl ? (
-                <iframe
-                  src={mapsEmbedUrl}
-                  width="100%"
-                  height="320"
-                  className="rounded-xl border-0"
-                  allowFullScreen
-                  loading="lazy"
-                  referrerPolicy="no-referrer-when-downgrade"
-                />
-              ) : (
-                <div className="flex h-48 items-center justify-center rounded-xl bg-zinc-800">
-                  <p className="text-zinc-500">
-                    No location coordinates available
-                  </p>
-                </div>
-              )}
+              <PropertyMap
+                address={
+                  [property.address, property.city, property.country]
+                    .filter(Boolean)
+                    .join(", ") || property.location
+                }
+              />
             </div>
           </div>
 
@@ -462,6 +445,12 @@ export default function PropertyDetailPage() {
                   </span>
                 </div>
               </div>
+            </div>
+
+            {/* WEATHER */}
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+              <h2 className="mb-4 text-lg font-bold">Weather</h2>
+              <WeatherWidget city={property.city || property.location} />
             </div>
 
             {/* AI INSIGHTS */}

@@ -50,6 +50,12 @@ export default function TenantsPage() {
     type: "success" | "error";
   } | null>(null);
 
+  // SMS modal state
+  const [smsTarget, setSmsTarget] = useState<Tenant | null>(null);
+  const [smsType, setSmsType] = useState<"rent-reminder" | "lease-expiry" | "custom">("rent-reminder");
+  const [smsCustomMessage, setSmsCustomMessage] = useState("");
+  const [smsSending, setSmsSending] = useState(false);
+
   const showNotification = (message: string, type: "success" | "error") => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 4000);
@@ -234,6 +240,53 @@ export default function TenantsPage() {
     if (now < start) return { label: "Upcoming", color: "text-blue-400" };
     if (now > end) return { label: "Expired", color: "text-red-400" };
     return { label: "Active", color: "text-green-400" };
+  };
+
+  const handleSendSms = async () => {
+    const token = localStorage.getItem("token");
+    if (!token || !smsTarget) return;
+
+    if (smsType === "custom" && !smsCustomMessage.trim()) {
+      showNotification("Please enter a custom message", "error");
+      return;
+    }
+
+    try {
+      setSmsSending(true);
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL;
+      let body: Record<string, string>;
+
+      if (smsType === "custom") {
+        body = { phone: smsTarget.phone, message: smsCustomMessage.trim() };
+      } else if (smsType === "rent-reminder") {
+        body = { tenantId: smsTarget._id };
+      } else {
+        body = { tenantId: smsTarget._id };
+      }
+
+      const res = await fetch(backendUrl + "/api/sms/" + smsType, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || data.message || "SMS failed");
+      }
+
+      setSmsTarget(null);
+      setSmsCustomMessage("");
+      setSmsType("rent-reminder");
+      showNotification("SMS sent successfully to " + smsTarget.name, "success");
+    } catch (err: any) {
+      showNotification(err.message || "Failed to send SMS", "error");
+    } finally {
+      setSmsSending(false);
+    }
   };
 
   // Filter tenants by search query (name, email, or property title)
@@ -530,7 +583,20 @@ export default function TenantsPage() {
                       </div>
 
                       {/* RIGHT: Action buttons */}
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
+                        {tenant.phone && (
+                          <button
+                            title="Send SMS"
+                            onClick={() => {
+                              setSmsTarget(tenant);
+                              setSmsType("rent-reminder");
+                              setSmsCustomMessage("");
+                            }}
+                            className="rounded-lg bg-purple-600 px-3 py-2 text-sm font-semibold text-white hover:bg-purple-700"
+                          >
+                            💬 SMS
+                          </button>
+                        )}
                         <button
                           onClick={() => handleEditTenant(tenant)}
                           className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
@@ -553,6 +619,81 @@ export default function TenantsPage() {
           )}
         </div>
       </div>
+
+      {/* SMS MODAL */}
+      {smsTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70 p-4"
+          onClick={() => setSmsTarget(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white">
+                Send SMS to {smsTarget.name}
+              </h2>
+              <button
+                onClick={() => setSmsTarget(null)}
+                className="text-zinc-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                Message Type
+              </label>
+              <select
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 p-3 text-white outline-none focus:border-blue-500"
+                value={smsType}
+                onChange={(e) =>
+                  setSmsType(
+                    e.target.value as "rent-reminder" | "lease-expiry" | "custom",
+                  )
+                }
+              >
+                <option value="rent-reminder">Rent Reminder</option>
+                <option value="lease-expiry">Lease Expiry Notice</option>
+                <option value="custom">Custom Message</option>
+              </select>
+            </div>
+
+            {smsType === "custom" && (
+              <div className="mb-4">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                  Your Message
+                </label>
+                <textarea
+                  rows={4}
+                  placeholder="Type your custom message here..."
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 p-3 text-white outline-none focus:border-blue-500"
+                  value={smsCustomMessage}
+                  onChange={(e) => setSmsCustomMessage(e.target.value)}
+                />
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleSendSms}
+                disabled={smsSending}
+                className="flex-1 rounded-lg bg-purple-600 px-4 py-3 font-semibold text-white hover:bg-purple-700 disabled:opacity-60"
+              >
+                {smsSending ? "Sending..." : "Send SMS"}
+              </button>
+              <button
+                onClick={() => setSmsTarget(null)}
+                className="rounded-lg border border-zinc-700 px-4 py-3 font-semibold text-white hover:bg-zinc-800"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

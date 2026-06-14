@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 
 export default function RegisterPage() {
@@ -10,6 +10,31 @@ export default function RegisterPage() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [detectedCountry, setDetectedCountry] = useState<string | null>(null);
+
+  useEffect(() => {
+    const detect = async () => {
+      try {
+        const token = process.env.NEXT_PUBLIC_IPINFO_TOKEN;
+        const url = token
+          ? "https://ipinfo.io/json?token=" + token
+          : "https://ipinfo.io/json";
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        const countryCode: string = data.country || "";
+        let currency = "USD";
+        if (countryCode === "BD") currency = "BDT";
+        else if (countryCode === "GB") currency = "GBP";
+        localStorage.setItem("propmate_currency", currency);
+        window.dispatchEvent(new Event("currencyChange"));
+        setDetectedCountry(data.country_name || countryCode || null);
+      } catch {
+        // silently ignore — IPInfo is optional
+      }
+    };
+    detect();
+  }, []);
 
   const handleRegister = async () => {
     try {
@@ -93,6 +118,12 @@ export default function RegisterPage() {
         <div className="mb-6 flex justify-center">
           <Logo theme="dark" size="lg" />
         </div>
+
+        {detectedCountry && (
+          <p className="mb-4 text-center text-sm" style={{ color: "#6B7280" }}>
+            Detected location: {detectedCountry}
+          </p>
+        )}
 
         {error && (
           <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
