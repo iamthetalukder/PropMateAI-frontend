@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const User = require("../models/User");
 const authMiddleware = require("../middleware/authMiddleware");
 const { sendVerificationEmail } = require("../utils/emailService");
+const mailchimpService = require("../utils/mailchimpService");
 
 const router = express.Router();
 
@@ -36,6 +37,16 @@ router.post("/register", async (req, res) => {
     });
 
     await sendVerificationEmail(email, name, verificationToken);
+
+    // Fire-and-forget — do not await; Mailchimp failure must never block registration
+    mailchimpService
+      .addToAudience(
+        email,
+        name.split(" ")[0],
+        name.split(" ")[1] || "",
+        ["landlord", "free-plan"],
+      )
+      .catch(console.error);
 
     res.status(201).json({
       message: "Registration successful. Please check your email to verify your account.",

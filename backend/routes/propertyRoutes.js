@@ -20,9 +20,11 @@ const deleteImages = async (imagePaths) => {
   if (!imagePaths || imagePaths.length === 0) return;
 
   for (const imgPath of imagePaths) {
-    if (imgPath.startsWith("http")) {
-      // Cloudinary URL
+    if (imgPath.startsWith("http") && imgPath.includes("cloudinary.com")) {
+      // Only delete images that are actually hosted on Cloudinary
       await deleteFromCloudinary(imgPath);
+    } else if (imgPath.startsWith("http")) {
+      // External URLs (e.g., Unsplash) — nothing to delete on our side
     } else {
       // Local disk path like "/uploads/filename.jpg"
       const fullPath = path.join(__dirname, "..", imgPath);
@@ -91,7 +93,17 @@ router.post("/", authMiddleware, uploadMiddleware, async (req, res) => {
         .json({ message: "Please fill title, location, and price" });
     }
 
-    const imagePaths = await processUploads(req);
+    const uploadedPaths = await processUploads(req);
+    // Merge Unsplash/external URLs sent as JSON array string alongside file uploads
+    let stockUrls = [];
+    if (req.body.stockPhotoUrls) {
+      try {
+        stockUrls = JSON.parse(req.body.stockPhotoUrls);
+      } catch (_) {
+        stockUrls = [];
+      }
+    }
+    const imagePaths = [...uploadedPaths, ...stockUrls];
 
     const property = await Property.create({
       title,
@@ -162,9 +174,19 @@ router.put("/:id", authMiddleware, uploadMiddleware, async (req, res) => {
     property.currency = currency ?? property.currency;
     property.status = status ?? property.status;
 
-    if (req.files && req.files.length > 0) {
+    let stockUrls = [];
+    if (req.body.stockPhotoUrls) {
+      try {
+        stockUrls = JSON.parse(req.body.stockPhotoUrls);
+      } catch (_) {
+        stockUrls = [];
+      }
+    }
+
+    if ((req.files && req.files.length > 0) || stockUrls.length > 0) {
       await deleteImages(property.images);
-      property.images = await processUploads(req);
+      const uploadedPaths = await processUploads(req);
+      property.images = [...uploadedPaths, ...stockUrls];
     }
 
     const updatedProperty = await property.save();

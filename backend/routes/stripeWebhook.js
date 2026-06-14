@@ -1,6 +1,7 @@
 const express = require("express");
 const Stripe = require("stripe");
 const User = require("../models/User");
+const mailchimpService = require("../utils/mailchimpService");
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -31,11 +32,21 @@ router.post(
           const userId = session.metadata.userId;
           const plan = session.metadata.plan;
 
-          await User.findByIdAndUpdate(userId, {
-            plan,
-            subscriptionStatus: "active",
-            stripeSubscriptionId: session.subscription,
-          });
+          const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            {
+              plan,
+              subscriptionStatus: "active",
+              stripeSubscriptionId: session.subscription,
+            },
+            { new: true },
+          );
+
+          if (updatedUser) {
+            mailchimpService
+              .updateContactTags(updatedUser.email, ["landlord", plan + "-plan"])
+              .catch(console.error);
+          }
           break;
         }
 

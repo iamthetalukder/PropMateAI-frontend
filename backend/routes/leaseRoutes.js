@@ -3,6 +3,7 @@ const Lease = require("../models/Lease");
 const Tenant = require("../models/Tenant");
 const Property = require("../models/Property");
 const authMiddleware = require("../middleware/authMiddleware");
+const { generateLeasePDF, generateRentReceiptPDF } = require("../utils/pdfGenerator");
 
 const router = express.Router();
 
@@ -144,6 +145,66 @@ router.get("/tenant/:tenantId", authMiddleware, async (req, res) => {
   } catch (error) {
     console.error("Fetch leases by tenant error:", error);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// GET - Download lease agreement as PDF
+router.get("/:id/pdf", authMiddleware, async (req, res) => {
+  try {
+    const lease = await Lease.findOne({ _id: req.params.id, owner: req.user.id })
+      .populate("tenantId", "name email phone")
+      .populate("propertyId", "title location address city country");
+
+    if (!lease) return res.status(404).json({ message: "Lease not found" });
+
+    const tenant = lease.tenantId || {};
+    const property = lease.propertyId || {};
+    const pdfBuffer = await generateLeasePDF(lease, tenant, property);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=lease-" + req.params.id + ".pdf",
+    );
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error("Lease PDF error:", error.message);
+    res.status(500).json({ message: "Failed to generate PDF" });
+  }
+});
+
+// GET - Download rent receipt as PDF
+router.get("/:id/receipt", authMiddleware, async (req, res) => {
+  try {
+    const lease = await Lease.findOne({ _id: req.params.id, owner: req.user.id })
+      .populate("tenantId", "name email phone")
+      .populate("propertyId", "title location");
+
+    if (!lease) return res.status(404).json({ message: "Lease not found" });
+
+    const tenant = lease.tenantId || {};
+    const property = lease.propertyId || {};
+
+    const now = new Date();
+    const payment = {
+      amount: lease.rentAmount,
+      currency: lease.currency || "USD",
+      paymentMethod: "Bank Transfer",
+      periodStart: new Date(now.getFullYear(), now.getMonth(), 1),
+      periodEnd: new Date(now.getFullYear(), now.getMonth() + 1, 0),
+    };
+
+    const pdfBuffer = await generateRentReceiptPDF(payment, tenant, property);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=receipt-" + req.params.id + ".pdf",
+    );
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error("Receipt PDF error:", error.message);
+    res.status(500).json({ message: "Failed to generate receipt" });
   }
 });
 

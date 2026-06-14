@@ -13,6 +13,12 @@ const aiRoutes = require("./routes/aiRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const stripeRoutes = require("./routes/stripe");
 const stripeWebhookRoute = require("./routes/stripeWebhook");
+const geocodeRoute = require("./routes/geocode");
+const smsRoute = require("./routes/sms");
+const weatherRoute = require("./routes/weather");
+const currencyRoute = require("./routes/currency");
+const unsplashRoute = require("./routes/unsplash");
+const mailchimpRoute = require("./routes/mailchimp");
 
 const app = express();
 
@@ -47,6 +53,12 @@ app.use("/api/maintenance", maintenanceRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/stripe", stripeRoutes);
+app.use("/api/geocode", geocodeRoute);
+app.use("/api/sms", smsRoute);
+app.use("/api/weather", weatherRoute);
+app.use("/api/currency", currencyRoute);
+app.use("/api/unsplash", unsplashRoute);
+app.use("/api/mailchimp", mailchimpRoute);
 
 mongoose
   .connect(process.env.MONGO_URI)
