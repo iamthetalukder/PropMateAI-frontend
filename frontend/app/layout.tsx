@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import "./globals.css";
 import ThemeToggle from "@/components/ThemeToggle";
 import CurrencySelector from "@/components/CurrencySelector";
@@ -23,6 +24,12 @@ export default function RootLayout({
       <body className="flex min-h-screen flex-col bg-white text-black dark:bg-zinc-950 dark:text-white transition-colors duration-300">
         {/* TOP BAR */}
         <div className="flex items-center justify-end gap-3 px-4 pt-4">
+          <Link
+            href="/pricing"
+            className="text-sm font-semibold text-zinc-500 hover:text-blue-500 dark:text-zinc-400 dark:hover:text-blue-400"
+          >
+            Pricing
+          </Link>
           <CurrencySelector />
           <ThemeToggle />
         </div>
