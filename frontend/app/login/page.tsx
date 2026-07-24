@@ -33,7 +33,7 @@ export default function LoginPage() {
 
       if (res.ok) {
         localStorage.setItem("token", data.token);
-        router.push("/");
+        router.push("/dashboard");
       } else if (data.emailNotVerified) {
         setEmailNotVerified(true);
       } else {

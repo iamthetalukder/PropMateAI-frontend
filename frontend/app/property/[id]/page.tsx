@@ -130,7 +130,7 @@ export default function PropertyDetailPage() {
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-zinc-950 text-white">
         <p className="text-2xl font-bold">Property not found</p>
         <button
-          onClick={() => router.push("/")}
+          onClick={() => router.push("/dashboard")}
           className="rounded-lg bg-blue-600 px-6 py-3 font-semibold hover:bg-blue-700"
         >
           Back to Dashboard
@@ -192,7 +192,7 @@ export default function PropertyDetailPage() {
       <div className="border-b border-zinc-800 bg-zinc-900 px-6 py-4">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/dashboard")}
             className="flex items-center gap-2 rounded-lg border border-zinc-700 px-4 py-2 text-sm font-semibold hover:bg-zinc-800"
           >
             Back to Dashboard
@@ -472,13 +472,13 @@ export default function PropertyDetailPage() {
               <h2 className="mb-4 text-lg font-bold">Actions</h2>
               <div className="flex flex-col gap-3">
                 <button
-                  onClick={() => router.push("/")}
+                  onClick={() => router.push("/dashboard")}
                   className="w-full rounded-lg bg-amber-500 px-4 py-3 font-semibold text-white hover:bg-amber-600"
                 >
                   Edit Property
                 </button>
                 <button
-                  onClick={() => router.push("/")}
+                  onClick={() => router.push("/dashboard")}
                   className="w-full rounded-lg border border-zinc-700 px-4 py-3 font-semibold hover:bg-zinc-800"
                 >
                   Back to Dashboard

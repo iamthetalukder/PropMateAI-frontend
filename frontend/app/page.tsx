@@ -1,935 +1,1039 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import AnalyticsSection from "../components/AnalyticsSection";
-import Logo from "@/components/Logo";
-import { useCurrency } from "@/hooks/useCurrency";
+// PropMate AI — Public landing page (no authentication required).
+// This is the marketing homepage shown at "/". The protected dashboard now
+// lives at "/dashboard". Everything below is fully public and self-contained.
 
-type Property = {
-  _id: string;
-  title: string;
-  location: string;
-  address?: string;
-  city?: string;
-  country?: string;
-  latitude?: number | null;
-  longitude?: number | null;
-  price: number;
-  currency?: string;
-  status: "occupied" | "vacant";
-  images?: string[];
-  createdAt?: string;
-};
+import { useState } from "react";
+import Link from "next/link";
 
-export default function DashboardPage() {
-  const router = useRouter();
-  const { formatAmount } = useCurrency();
-  const [loading, setLoading] = useState(true);
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [userName, setUserName] = useState("");
-  const [userRole, setUserRole] = useState<string>("manager");
-  const [title, setTitle] = useState("");
-  const [location, setLocation] = useState("");
-  const [address, setAddress] = useState("");
-  const [city, setCity] = useState("");
-  const [country, setCountry] = useState("");
-  const [price, setPrice] = useState("");
-  const [currency, setCurrency] = useState("USD");
-  const [status, setStatus] = useState<"occupied" | "vacant">("vacant");
-  const [images, setImages] = useState<FileList | null>(null);
-  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
-  const [stockPhotoUrls, setStockPhotoUrls] = useState<string[]>([]);
-  const [unsplashResults, setUnsplashResults] = useState<
-    { id: string; url: string; thumb: string; photographer: string }[]
-  >([]);
-  const [unsplashLoading, setUnsplashLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [deletingId, setDeletingId] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all");
-  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
-  const [notification, setNotification] = useState<{
-    message: string;
-    type: "success" | "error";
-  } | null>(null);
+// The four interactive modals are driven by a single piece of state.
+// "null" means no modal is open.
+type ModalType = "privacy" | "terms" | "blog" | "support" | null;
 
-  const showNotification = (message: string, type: "success" | "error") => {
-    setNotification({ message, type });
-    setTimeout(() => setNotification(null), 4000);
-  };
+// All landing-page CSS lives in one string that we inject via a <style> tag.
+// React 19 (Next.js 16 App Router) hoists this into the document head for us.
+// Keeping the CSS here lets us use real media queries for responsiveness
+// while sticking to the exact color system requested.
+const landingStyles = `
+  .lp-root {
+    background: #070D1A;
+    color: #E6EEF8;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    scroll-behavior: smooth;
+  }
+  .lp-root * { box-sizing: border-box; }
 
-  const fetchProperties = async (token: string) => {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-      const res = await fetch(
-        process.env.NEXT_PUBLIC_API_URL + "/api/properties",
-        {
-          headers: { Authorization: "Bearer " + token },
-          signal: controller.signal,
-        },
-      );
-      clearTimeout(timeout);
-      if (!res.ok) throw new Error("Failed to fetch properties");
-      const data = await res.json();
-      setProperties(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Fetch properties error:", err);
-      setProperties([]);
-    }
-  };
+  /* ---------- Navbar ---------- */
+  .lp-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 900;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #070D1A;
+    border-bottom: 1px solid #0F1E35;
+    padding: 22px 56px;
+  }
+  .lp-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+  }
+  .lp-logo-word { font-size: 20px; font-weight: 800; color: #FFFFFF; letter-spacing: -0.02em; }
+  .lp-logo-mate { color: #4A9EFF; }
+  .lp-logo-ai { color: #F5C842; font-size: 13px; margin-left: 2px; }
+  .lp-nav-center { display: flex; align-items: center; gap: 34px; }
+  .lp-nav-link {
+    background: none;
+    border: none;
+    color: #8AA6C4;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.15s;
+  }
+  .lp-nav-link:hover { color: #FFFFFF; }
+  .lp-nav-right { display: flex; align-items: center; gap: 14px; }
+  .lp-btn-ghost {
+    color: #B4C6DC;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 9px 18px;
+    border-radius: 10px;
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s;
+  }
+  .lp-btn-ghost:hover { background: #0F1E35; color: #FFFFFF; }
+  .lp-btn-blue {
+    background: #4A9EFF;
+    color: #0B1120;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 10px 20px;
+    border-radius: 10px;
+    text-decoration: none;
+    transition: background 0.15s;
+  }
+  .lp-btn-blue:hover { background: #6BB0FF; }
 
-  const getCoordinates = async () => {
-    const parts = [address, city, country].filter(Boolean);
-    const fullAddress = parts.join(", ");
-    if (!fullAddress.trim()) return null;
-    try {
-      const res = await fetch(
-        "https://nominatim.openstreetmap.org/search?format=json&q=" +
-          encodeURIComponent(fullAddress),
-        { headers: { Accept: "application/json" } },
-      );
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        return { lat: data[0].lat, lon: data[0].lon };
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  };
+  /* ---------- Shared button styles ---------- */
+  .lp-btn-gold {
+    background: #F5C842;
+    color: #0B1120;
+    font-size: 16px;
+    font-weight: 800;
+    padding: 16px 36px;
+    border-radius: 12px;
+    text-decoration: none;
+    display: inline-block;
+    transition: background 0.15s, transform 0.15s;
+  }
+  .lp-btn-gold:hover { background: #FFD766; transform: translateY(-1px); }
+  .lp-btn-outline {
+    background: transparent;
+    color: #C4D4E8;
+    font-size: 16px;
+    font-weight: 700;
+    padding: 16px 34px;
+    border: 1px solid #1A2D4A;
+    border-radius: 12px;
+    text-decoration: none;
+    display: inline-block;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .lp-btn-outline:hover { border-color: #4A9EFF; color: #FFFFFF; }
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-    try {
-      const decoded: { name?: string; role?: string } = JSON.parse(
-        atob(token.split(".")[1]),
-      );
-      setUserName(decoded.name || "User");
-      setUserRole(decoded.role || "manager");
-    } catch {
-      setUserName("User");
-    }
-    fetchProperties(token).finally(() => setLoading(false));
-  }, [router]);
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-    if (files.length > 20) {
-      showNotification("Maximum 20 images allowed", "error");
-      return;
-    }
-    setImages(files);
-    const urls: string[] = [];
-    for (let i = 0; i < files.length; i++) {
-      urls.push(URL.createObjectURL(files[i]));
-    }
-    setPreviewUrls(urls);
-  };
-
-  const fetchUnsplashPhotos = async (keyword: string) => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-    try {
-      setUnsplashLoading(true);
-      const res = await fetch(
-        process.env.NEXT_PUBLIC_API_URL +
-          "/api/unsplash/search?query=" +
-          encodeURIComponent(keyword),
-        { headers: { Authorization: "Bearer " + token } },
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setUnsplashResults(Array.isArray(data) ? data : []);
-      }
-    } catch (err) {
-      console.error("Unsplash fetch error:", err);
-    } finally {
-      setUnsplashLoading(false);
-    }
-  };
-
-  const toggleStockPhoto = (url: string) => {
-    setStockPhotoUrls((prev) =>
-      prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url],
-    );
-  };
-
-  const resetForm = () => {
-    setTitle("");
-    setLocation("");
-    setAddress("");
-    setCity("");
-    setCountry("");
-    setPrice("");
-    setCurrency("USD");
-    setStatus("vacant");
-    setImages(null);
-    setPreviewUrls([]);
-    setStockPhotoUrls([]);
-    setUnsplashResults([]);
-    setEditingId(null);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    router.push("/login");
-  };
-
-  const handleAddOrUpdateProperty = async () => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-    if (!title.trim() || !location.trim() || !price.trim()) {
-      showNotification("Please fill title, location, and price", "error");
-      return;
-    }
-    try {
-      setSubmitting(true);
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      if (editingId) {
-        const formData = new FormData();
-        formData.append("title", title);
-        formData.append("location", location);
-        formData.append("address", address);
-        formData.append("city", city);
-        formData.append("country", country);
-        formData.append("price", price);
-        formData.append("currency", currency);
-        formData.append("status", status);
-        if (stockPhotoUrls.length > 0) {
-          formData.append("stockPhotoUrls", JSON.stringify(stockPhotoUrls));
-        }
-        const coords = await getCoordinates();
-        if (coords) {
-          formData.append("latitude", coords.lat);
-          formData.append("longitude", coords.lon);
-        }
-        if (images) {
-          for (let i = 0; i < images.length; i++) {
-            formData.append("images", images[i]);
-          }
-        }
-        const res = await fetch(apiUrl + "/api/properties/" + editingId, {
-          method: "PUT",
-          headers: { Authorization: "Bearer " + token },
-          body: formData,
-        });
-        const data = await res.json();
-        if (!res.ok)
-          throw new Error(data.message || "Failed to update property");
-        await fetchProperties(token);
-        resetForm();
-        showNotification("Property updated successfully!", "success");
-      } else {
-        const coords = await getCoordinates();
-        if (!coords && (address.trim() || city.trim() || country.trim())) {
-          showNotification(
-            "Could not detect location. Check address, city, or country.",
-            "error",
-          );
-          setSubmitting(false);
-          return;
-        }
-        const formData = new FormData();
-        formData.append("title", title);
-        formData.append("location", location);
-        formData.append("address", address);
-        formData.append("city", city);
-        formData.append("country", country);
-        formData.append("price", price);
-        formData.append("currency", currency);
-        formData.append("status", status);
-        if (stockPhotoUrls.length > 0) {
-          formData.append("stockPhotoUrls", JSON.stringify(stockPhotoUrls));
-        }
-        if (coords) {
-          formData.append("latitude", coords.lat);
-          formData.append("longitude", coords.lon);
-        }
-        if (images) {
-          for (let i = 0; i < images.length; i++) {
-            formData.append("images", images[i]);
-          }
-        }
-        const res = await fetch(apiUrl + "/api/properties", {
-          method: "POST",
-          headers: { Authorization: "Bearer " + token },
-          body: formData,
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || "Failed to add property");
-        await fetchProperties(token);
-        resetForm();
-        showNotification("Property added successfully!", "success");
-      }
-    } catch (error: any) {
-      showNotification(error.message || "Failed to save property", "error");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleEditProperty = (property: Property) => {
-    setEditingId(property._id);
-    setTitle(property.title || "");
-    setLocation(property.location || "");
-    setAddress(property.address || "");
-    setCity(property.city || "");
-    setCountry(property.country || "");
-    setPrice(String(property.price ?? ""));
-    setCurrency(property.currency || "USD");
-    setStatus(property.status || "vacant");
-    setImages(null);
-    setPreviewUrls([]);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const handleDeleteProperty = async (id: string) => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-    if (!window.confirm("Are you sure you want to delete this property?"))
-      return;
-    try {
-      setDeletingId(id);
-      const res = await fetch(
-        process.env.NEXT_PUBLIC_API_URL + "/api/properties/" + id,
-        { method: "DELETE", headers: { Authorization: "Bearer " + token } },
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to delete property");
-      if (editingId === id) resetForm();
-      await fetchProperties(token);
-      showNotification("Property deleted successfully!", "success");
-    } catch (error: any) {
-      showNotification(error.message || "Failed to delete property", "error");
-    } finally {
-      setDeletingId("");
-    }
-  };
-
-  const totalProperties = properties.length;
-  const occupiedUnits = properties.filter(
-    (p) => p.status === "occupied",
-  ).length;
-  const vacantUnits = properties.filter((p) => p.status === "vacant").length;
-
-  const filteredProperties = properties.filter((property) => {
-    const matchesSearch =
-      property.title.toLowerCase().includes(search.toLowerCase()) ||
-      property.location.toLowerCase().includes(search.toLowerCase()) ||
-      (property.city || "").toLowerCase().includes(search.toLowerCase()) ||
-      (property.country || "").toLowerCase().includes(search.toLowerCase());
-    return matchesSearch && (filter === "all" || property.status === filter);
-  });
-
-  const totalPortfolioValue = useMemo(
-    () => properties.reduce((sum, p) => sum + Number(p.price || 0), 0),
-    [properties],
-  );
-  const highestPricedProperty = useMemo(
-    () =>
-      properties.length === 0
-        ? null
-        : properties.reduce((max, c) => (c.price > max.price ? c : max)),
-    [properties],
-  );
-  const vacancyRate = useMemo(
-    () =>
-      totalProperties === 0
-        ? 0
-        : Math.round((vacantUnits / totalProperties) * 100),
-    [vacantUnits, totalProperties],
-  );
-  const insightMessage = useMemo(() => {
-    if (properties.length === 0)
-      return "Start by adding your first property to unlock insights.";
-    if (vacancyRate >= 50)
-      return "Vacancy is high. Focus on filling empty units to improve performance.";
-    if (occupiedUnits === totalProperties)
-      return "Excellent — all your listed properties are occupied.";
-    return "Your portfolio looks balanced. Keep monitoring vacancies and pricing.";
-  }, [properties.length, vacancyRate, occupiedUnits, totalProperties]);
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-100 dark:bg-zinc-950 dark:text-white">
-        <div className="text-center">
-          <div className="mb-4 text-4xl">⏳</div>
-          <p className="text-lg font-semibold">Loading your dashboard...</p>
-          <p className="mt-2 text-sm text-zinc-500">Connecting to database</p>
-        </div>
-      </div>
-    );
+  /* ---------- Section shells ---------- */
+  .lp-section { padding: 100px 56px; }
+  .lp-section-inner { max-width: 1120px; margin: 0 auto; }
+  .lp-eyebrow {
+    color: #F5C842;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-align: center;
+  }
+  .lp-title {
+    font-size: 40px;
+    font-weight: 900;
+    letter-spacing: -1.5px;
+    text-align: center;
+    margin: 16px 0 14px;
+    color: #FFFFFF;
+    line-height: 1.1;
+  }
+  .lp-subtitle {
+    font-size: 18px;
+    color: #4A6A8A;
+    text-align: center;
+    max-width: 620px;
+    margin: 0 auto;
+    line-height: 1.6;
   }
 
+  /* ---------- Hero ---------- */
+  .lp-hero {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 120px 56px 100px;
+    text-align: center;
+  }
+  .lp-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(74,158,255,0.10);
+    border: 1px solid rgba(74,158,255,0.25);
+    color: #7FB6FF;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 7px 16px;
+    border-radius: 999px;
+    margin-bottom: 30px;
+  }
+  .lp-pill-dot { width: 7px; height: 7px; border-radius: 50%; background: #4A9EFF; }
+  .lp-h1 {
+    font-size: 64px;
+    font-weight: 900;
+    letter-spacing: -3px;
+    line-height: 1.05;
+    margin: 0 0 26px;
+    color: #FFFFFF;
+  }
+  .lp-h1-blue { color: #4A9EFF; }
+  .lp-h1-gold { color: #F5C842; }
+  .lp-hero-sub {
+    font-size: 19px;
+    color: #4A6A8A;
+    max-width: 580px;
+    margin: 0 auto 38px;
+    line-height: 1.6;
+  }
+  .lp-cta-row {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 56px;
+  }
+  .lp-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    border: 1px solid #0F1E35;
+    border-radius: 16px;
+    max-width: 700px;
+    margin: 0 auto;
+    overflow: hidden;
+  }
+  .lp-stat {
+    background: #080E1C;
+    padding: 24px 20px;
+    text-align: center;
+  }
+  .lp-stat-num { font-size: 32px; font-weight: 800; margin-bottom: 4px; }
+  .lp-stat-label { font-size: 13px; color: #4A6A8A; }
+
+  /* ---------- Features ---------- */
+  .lp-features { background: #060B15; }
+  .lp-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+    margin-top: 54px;
+  }
+  .lp-card {
+    background: #080E1C;
+    border: 1px solid #0F1E35;
+    border-radius: 20px;
+    padding: 32px;
+    transition: border-color 0.18s;
+  }
+  .lp-card:hover { border-color: #1A2D4A; }
+  .lp-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    margin-bottom: 20px;
+  }
+  .lp-card-title { font-size: 19px; font-weight: 700; color: #FFFFFF; margin: 0 0 10px; }
+  .lp-card-desc { font-size: 15px; color: #4A6A8A; line-height: 1.65; margin: 0; }
+
+  /* ---------- Comparison ---------- */
+  .lp-compare { background: #070D1A; }
+  .lp-badge-center { text-align: center; margin: 40px 0 20px; }
+  .lp-badge {
+    display: inline-block;
+    background: rgba(74,158,255,0.10);
+    border: 1px solid rgba(74,158,255,0.25);
+    color: #7FB6FF;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 8px 16px;
+    border-radius: 999px;
+  }
+  .lp-table {
+    max-width: 860px;
+    margin: 0 auto;
+    background: #080E1C;
+    border: 1px solid #0F1E35;
+    border-radius: 20px;
+    overflow: hidden;
+  }
+  .lp-trow {
+    display: grid;
+    grid-template-columns: 1fr 140px 140px 140px;
+    align-items: center;
+    border-bottom: 1px solid #0F1E35;
+  }
+  .lp-trow:last-child { border-bottom: none; }
+  .lp-thead { background: #0A1220; }
+  .lp-tcell { padding: 16px 18px; font-size: 14px; }
+  .lp-tcell-center { text-align: center; }
+  .lp-th-feature { color: #3A5A7A; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; }
+  .lp-th-comp { color: #3A5A7A; font-weight: 600; }
+  .lp-th-prop { color: #4A9EFF; font-weight: 800; }
+  .lp-td-feature { color: #B4C6DC; font-weight: 500; }
+  .lp-td-comp { color: #2A4060; }
+  .lp-td-prop { color: #4A9EFF; font-weight: 700; }
+  .lp-td-prop-gold { color: #F5C842; font-weight: 700; }
+
+  /* ---------- Testimonials ---------- */
+  .lp-testimonials { background: #060B15; }
+  .lp-tcard {
+    background: #080E1C;
+    border: 1px solid #0F1E35;
+    border-radius: 20px;
+    padding: 28px;
+  }
+  .lp-stars { color: #F5C842; font-size: 16px; letter-spacing: 2px; margin-bottom: 14px; }
+  .lp-quote { font-size: 15px; color: #C4D4E8; line-height: 1.7; margin: 0 0 22px; }
+  .lp-person { display: flex; align-items: center; gap: 12px; }
+  .lp-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 15px;
+  }
+  .lp-person-name { font-size: 15px; font-weight: 700; color: #FFFFFF; }
+  .lp-person-role { font-size: 13px; color: #4A6A8A; }
+
+  /* ---------- Final CTA ---------- */
+  .lp-finalcta {
+    background: #080E1C;
+    border-top: 1px solid #0F1E35;
+    border-bottom: 1px solid #0F1E35;
+    padding: 100px 56px;
+    text-align: center;
+  }
+  .lp-finalcta h2 {
+    font-size: 48px;
+    font-weight: 900;
+    letter-spacing: -2px;
+    color: #FFFFFF;
+    margin: 0 0 18px;
+    line-height: 1.1;
+  }
+  .lp-finalcta-blue { color: #4A9EFF; }
+  .lp-finalcta p {
+    font-size: 18px;
+    color: #4A6A8A;
+    max-width: 560px;
+    margin: 0 auto 36px;
+    line-height: 1.6;
+  }
+
+  /* ---------- Footer ---------- */
+  .lp-footer {
+    padding: 48px 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid #0F1E35;
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+  .lp-footer-copy { font-size: 13px; color: #2A4060; }
+  .lp-footer-links { display: flex; gap: 24px; flex-wrap: wrap; }
+  .lp-footer-link {
+    background: none;
+    border: none;
+    color: #4A6A8A;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.15s;
+  }
+  .lp-footer-link:hover { color: #4A9EFF; }
+
+  /* ---------- Modals ---------- */
+  .lp-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(7,13,26,0.95);
+    z-index: 1000;
+    overflow-y: auto;
+  }
+  .lp-modal {
+    max-width: 720px;
+    margin: 60px auto;
+    background: #080E1C;
+    border: 1px solid #0F1E35;
+    border-radius: 20px;
+    padding: 48px;
+    position: relative;
+  }
+  .lp-modal-close {
+    position: absolute;
+    top: 22px;
+    right: 22px;
+    background: #0F1E35;
+    border: none;
+    color: #B4C6DC;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    font-size: 18px;
+    cursor: pointer;
+    line-height: 1;
+    transition: background 0.15s, color 0.15s;
+  }
+  .lp-modal-close:hover { background: #1A2D4A; color: #FFFFFF; }
+  .lp-modal-title { font-size: 30px; font-weight: 900; letter-spacing: -1px; color: #FFFFFF; margin: 0 0 8px; }
+  .lp-modal-sub { font-size: 14px; color: #4A6A8A; margin: 0 0 28px; }
+  .lp-modal-h3 { font-size: 17px; font-weight: 700; color: #4A9EFF; margin: 24px 0 8px; }
+  .lp-modal-p { font-size: 14px; color: #8AA6C4; line-height: 1.7; margin: 0; }
+
+  .lp-modal-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .lp-blog-card {
+    background: #060B15;
+    border: 1px solid #0F1E35;
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .lp-blog-tag { color: #4A9EFF; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .lp-blog-title { font-size: 15px; font-weight: 700; color: #E6EEF8; margin: 8px 0; line-height: 1.4; }
+  .lp-blog-date { font-size: 11px; color: #2A4060; }
+
+  .lp-faq {
+    background: #060B15;
+    border: 1px solid #0F1E35;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 12px;
+  }
+  .lp-faq-q { font-weight: 700; color: #E6EEF8; font-size: 15px; margin: 0 0 8px; }
+  .lp-faq-a { color: #4A6A8A; font-size: 13px; line-height: 1.7; margin: 0; }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 768px) {
+    .lp-nav { padding: 16px 20px; }
+    .lp-nav-center { display: none; }
+    .lp-section { padding: 64px 20px; }
+    .lp-hero { padding: 96px 20px 64px; }
+    .lp-h1 { font-size: 40px; letter-spacing: -1.5px; }
+    .lp-hero-sub { font-size: 16px; }
+    .lp-title { font-size: 30px; }
+    .lp-subtitle { font-size: 16px; }
+    .lp-grid-3 { grid-template-columns: 1fr; }
+    .lp-stats { grid-template-columns: repeat(2, 1fr); }
+    .lp-finalcta { padding: 64px 20px; }
+    .lp-finalcta h2 { font-size: 32px; }
+    .lp-modal { margin: 20px; padding: 28px; }
+    .lp-modal-grid { grid-template-columns: 1fr; }
+    .lp-trow { grid-template-columns: 1fr 80px 80px 80px; }
+    .lp-tcell { padding: 12px 8px; font-size: 12px; }
+    .lp-footer { flex-direction: column; text-align: center; }
+  }
+`;
+
+// ---------- Data used by the Features / Comparison / Testimonials / Blog / FAQ ----------
+
+type Feature = {
+  icon: string;
+  iconColor: string;
+  iconBg: string;
+  title: string;
+  desc: string;
+};
+
+const FEATURES: Feature[] = [
+  {
+    icon: "ti-cpu",
+    iconColor: "#4A9EFF",
+    iconBg: "rgba(74,158,255,0.08)",
+    title: "Claude AI insights",
+    desc: "Get rent price suggestions, tenant screening summaries, and predictive maintenance alerts powered by Anthropic's Claude AI.",
+  },
+  {
+    icon: "ti-map-pin",
+    iconColor: "#F5C842",
+    iconBg: "rgba(245,200,66,0.08)",
+    title: "Google Maps integration",
+    desc: "Interactive maps, neighborhood views, and weather widgets on every property page. Tenants find you instantly.",
+  },
+  {
+    icon: "ti-file-invoice",
+    iconColor: "#4AE88A",
+    iconBg: "rgba(74,232,138,0.08)",
+    title: "PDF lease exports",
+    desc: "Generate professional lease agreements and rent receipts in one click. No Word docs, no manual formatting.",
+  },
+  {
+    icon: "ti-message",
+    iconColor: "#FF6B6B",
+    iconBg: "rgba(255,107,107,0.08)",
+    title: "Twilio SMS alerts",
+    desc: "Send rent reminders, maintenance updates, and lease expiry notices directly to tenants via SMS.",
+  },
+  {
+    icon: "ti-calendar",
+    iconColor: "#4A9EFF",
+    iconBg: "rgba(74,158,255,0.08)",
+    title: "Google Calendar sync",
+    desc: "Lease dates, rent due dates, and maintenance schedules sync automatically to your Google Calendar.",
+  },
+  {
+    icon: "ti-world",
+    iconColor: "#F5C842",
+    iconBg: "rgba(245,200,66,0.08)",
+    title: "16 global currencies",
+    desc: "USD, GBP, AED, TRY, INR, SGD, MYR, THB, CHF and 7 more — all converted live via ExchangeRate API.",
+  },
+];
+
+type CompareRow = {
+  feature: string;
+  buildium: string;
+  showdigs: string;
+  propmate: string;
+  gold?: boolean;
+};
+
+const COMPARE_ROWS: CompareRow[] = [
+  { feature: "Starting price", buildium: "$62/mo", showdigs: "$150/mo", propmate: "$0/mo", gold: true },
+  { feature: "Per-unit fees", buildium: "Yes", showdigs: "$40-45/showing", propmate: "Never" },
+  { feature: "AI-powered features", buildium: "Limited", showdigs: "Leasing only", propmate: "Full Claude AI" },
+  { feature: "Google Maps on properties", buildium: "No", showdigs: "No", propmate: "Yes" },
+  { feature: "SMS tenant notifications", buildium: "Paid add-on", showdigs: "No", propmate: "Built-in" },
+  { feature: "Multi-currency support", buildium: "No", showdigs: "USD only", propmate: "16 currencies" },
+  { feature: "Google Calendar sync", buildium: "No", showdigs: "Limited", propmate: "Yes" },
+  { feature: "PDF lease export", buildium: "Basic", showdigs: "No", propmate: "Yes" },
+  { feature: "Minimum portfolio size", buildium: "Any", showdigs: "200+ doors", propmate: "Any size" },
+  { feature: "Global availability", buildium: "US only", showdigs: "US only", propmate: "40+ countries", gold: true },
+];
+
+type Testimonial = {
+  quote: string;
+  initials: string;
+  avatarBg: string;
+  avatarColor: string;
+  name: string;
+  role: string;
+};
+
+const TESTIMONIALS: Testimonial[] = [
+  {
+    quote: "Switched from Buildium and saving $45/mo. The AI rent suggestions alone paid for the subscription in the first month.",
+    initials: "JM",
+    avatarBg: "rgba(74,158,255,0.12)",
+    avatarColor: "#4A9EFF",
+    name: "James Mitchell",
+    role: "12 properties · New York",
+  },
+  {
+    quote: "The Google Maps + weather widget is incredible. My tenants love it. And the AED currency support is perfect for my Dubai portfolio.",
+    initials: "SA",
+    avatarBg: "rgba(245,200,66,0.12)",
+    avatarColor: "#F5C842",
+    name: "Sarah Al-Rashidi",
+    role: "Agency owner · Dubai, UAE",
+  },
+  {
+    quote: "I was using Showdigs but the $45 per showing was killing my margins. PropMate AI is flat rate and does more. Easy switch.",
+    initials: "RK",
+    avatarBg: "rgba(74,232,138,0.12)",
+    avatarColor: "#4AE88A",
+    name: "Rahul Kumar",
+    role: "28 properties · Singapore",
+  },
+];
+
+type BlogPost = { tag: string; title: string; date: string };
+
+const BLOG_POSTS: BlogPost[] = [
+  { tag: "AI & Automation", title: "How AI is changing rent price optimization in 2026", date: "June 10, 2026" },
+  { tag: "Pricing", title: "Buildium vs PropMate AI: A full cost breakdown", date: "June 5, 2026" },
+  { tag: "Growth", title: "How to scale from 1 to 15 properties without hiring staff", date: "May 28, 2026" },
+  { tag: "International", title: "Managing properties across multiple currencies: A guide", date: "May 20, 2026" },
+  { tag: "Features", title: "Why every landlord needs Google Calendar sync in 2026", date: "May 14, 2026" },
+  { tag: "Tenant Management", title: "SMS vs email: Which works better for rent reminders?", date: "May 8, 2026" },
+];
+
+type Faq = { q: string; a: string };
+
+const FAQS: Faq[] = [
+  {
+    q: "How do I add my first property?",
+    a: 'After logging in, go to the dashboard and scroll to "Add Property". Fill in the property title, address, city, country, and monthly price. Upload up to 20 images and click "Add Property".',
+  },
+  {
+    q: "Why didn't I receive my verification email?",
+    a: "Check your spam folder. Wait 2 minutes and try registering again. Contact support if the issue persists.",
+  },
+  {
+    q: "How do I upgrade from Free to Pro?",
+    a: 'Go to /pricing, click "Start Pro — 14 days free", and complete the Stripe checkout. Your plan upgrades instantly.',
+  },
+  {
+    q: "Can I manage properties in multiple currencies?",
+    a: "Yes. Use the currency selector in the navbar to switch between 16 currencies. Rates update automatically every hour.",
+  },
+  {
+    q: "How do I cancel my subscription?",
+    a: "Go to Settings → Billing → Manage Subscription to open the Stripe billing portal and cancel.",
+  },
+  {
+    q: "Is my data secure?",
+    a: "Yes. All data is encrypted in transit (SSL) and at rest (MongoDB Atlas). Passwords are hashed with bcrypt. We never share your data.",
+  },
+];
+
+export default function LandingPage() {
+  // Tracks which modal (if any) is currently open.
+  const [activeModal, setActiveModal] = useState<ModalType>(null);
+
+  // Smoothly scrolls to a section by its id (used by the Features/Compare nav links).
+  const scrollToSection = (id: string) => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-zinc-100 px-6 py-10 text-black dark:bg-zinc-950 dark:text-white">
-      {lightboxImage && (
+    <div className="lp-root">
+      {/* Inject landing-page CSS + Tabler icon webfont. React hoists both to <head>. */}
+      <style>{landingStyles}</style>
+      <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"
+      />
+
+      {/* ---------- SECTION 1 — Navbar ---------- */}
+      <nav className="lp-nav">
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90"
-          onClick={() => setLightboxImage(null)}
+          className="lp-logo"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
         >
-          <button
-            className="absolute right-6 top-6 text-3xl text-white hover:text-zinc-300"
-            onClick={() => setLightboxImage(null)}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 32 32"
+            width={30}
+            height={30}
+            aria-hidden="true"
           >
-            ✕
+            <rect x="8" y="11" width="4" height="17" rx="1" fill="#4A9EFF" opacity="0.5" />
+            <rect x="14" y="8" width="5" height="20" rx="1" fill="#4A9EFF" opacity="0.75" />
+            <rect x="21" y="11" width="4" height="17" rx="1" fill="#4A9EFF" opacity="0.5" />
+            <rect x="13" y="6" width="7" height="22" rx="2" fill="#4A9EFF" />
+            <circle cx="16" cy="4" r="2.5" fill="#F5C842" />
+          </svg>
+          <span className="lp-logo-word">
+            Prop<span className="lp-logo-mate">Mate</span>
+            <span className="lp-logo-ai">AI</span>
+          </span>
+        </div>
+
+        <div className="lp-nav-center">
+          <button className="lp-nav-link" onClick={() => scrollToSection("features")}>
+            Features
           </button>
-          <img
-            src={lightboxImage}
-            alt="Preview"
-            className="max-h-screen max-w-5xl rounded-xl object-contain p-4"
-          />
+          <button className="lp-nav-link" onClick={() => scrollToSection("compare")}>
+            Compare
+          </button>
+          <button className="lp-nav-link" onClick={() => setActiveModal("blog")}>
+            Blog
+          </button>
+          <button className="lp-nav-link" onClick={() => setActiveModal("support")}>
+            Support
+          </button>
         </div>
-      )}
 
-      {notification && (
+        <div className="lp-nav-right">
+          <Link href="/login" className="lp-btn-ghost">
+            Log in
+          </Link>
+          <Link href="/register" className="lp-btn-blue">
+            Start free
+          </Link>
+        </div>
+      </nav>
+
+      {/* ---------- SECTION 2 — Hero ---------- */}
+      <header className="lp-hero">
+        <div className="lp-pill">
+          <span className="lp-pill-dot" />
+          Trusted by landlords in 40+ countries
+        </div>
+
+        <h1 className="lp-h1">
+          Property management
+          <br />
+          reimagined with <span className="lp-h1-blue">AI.</span>
+          <br />
+          Priced for <span className="lp-h1-gold">humans.</span>
+        </h1>
+
+        <p className="lp-hero-sub">
+          The only property management platform that combines Claude AI, Google
+          Maps, SMS notifications, and 16-currency support — at a flat rate that
+          never grows with your portfolio.
+        </p>
+
+        <div className="lp-cta-row">
+          <Link href="/register" className="lp-btn-gold">
+            Start free — no credit card
+          </Link>
+          <Link href="/pricing" className="lp-btn-outline">
+            View pricing
+          </Link>
+        </div>
+
+        <div className="lp-stats">
+          <div className="lp-stat">
+            <div className="lp-stat-num" style={{ color: "#4A9EFF" }}>
+              $0
+            </div>
+            <div className="lp-stat-label">To get started</div>
+          </div>
+          <div className="lp-stat">
+            <div className="lp-stat-num" style={{ color: "#F5C842" }}>
+              62%
+            </div>
+            <div className="lp-stat-label">Less than Buildium</div>
+          </div>
+          <div className="lp-stat">
+            <div className="lp-stat-num" style={{ color: "#4AE88A" }}>
+              8+
+            </div>
+            <div className="lp-stat-label">Integrations built-in</div>
+          </div>
+          <div className="lp-stat">
+            <div className="lp-stat-num" style={{ color: "#FF6B6B" }}>
+              16
+            </div>
+            <div className="lp-stat-label">Currencies supported</div>
+          </div>
+        </div>
+      </header>
+
+      {/* ---------- SECTION 3 — Features ---------- */}
+      <section id="features" className="lp-section lp-features">
+        <div className="lp-section-inner">
+          <div className="lp-eyebrow">EVERYTHING YOU NEED</div>
+          <h2 className="lp-title">Built for every landlord, at every scale</h2>
+          <p className="lp-subtitle">
+            From your first property to your hundredth — PropMate AI grows with
+            you.
+          </p>
+
+          <div className="lp-grid-3">
+            {FEATURES.map((feature) => (
+              <div key={feature.title} className="lp-card">
+                <div
+                  className="lp-icon"
+                  style={{ background: feature.iconBg, color: feature.iconColor }}
+                >
+                  <i className={feature.icon} />
+                </div>
+                <h3 className="lp-card-title">{feature.title}</h3>
+                <p className="lp-card-desc">{feature.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ---------- SECTION 4 — Competitor Comparison ---------- */}
+      <section id="compare" className="lp-section lp-compare">
+        <div className="lp-section-inner">
+          <div className="lp-eyebrow">HONEST COMPARISON</div>
+          <h2 className="lp-title">
+            Why landlords choose PropMate AI over the rest
+          </h2>
+          <p className="lp-subtitle">
+            We did the research so you don&apos;t have to. No spin — just facts.
+          </p>
+
+          <div className="lp-badge-center">
+            <span className="lp-badge">PROPMATE AI WINS ON EVERY ROW</span>
+          </div>
+
+          <div className="lp-table">
+            <div className="lp-trow lp-thead">
+              <div className="lp-tcell lp-th-feature">FEATURE</div>
+              <div className="lp-tcell lp-tcell-center lp-th-comp">Buildium</div>
+              <div className="lp-tcell lp-tcell-center lp-th-comp">Showdigs</div>
+              <div className="lp-tcell lp-tcell-center lp-th-prop">PropMate AI</div>
+            </div>
+
+            {COMPARE_ROWS.map((row) => (
+              <div key={row.feature} className="lp-trow">
+                <div className="lp-tcell lp-td-feature">{row.feature}</div>
+                <div className="lp-tcell lp-tcell-center lp-td-comp">
+                  {row.buildium}
+                </div>
+                <div className="lp-tcell lp-tcell-center lp-td-comp">
+                  {row.showdigs}
+                </div>
+                <div
+                  className={
+                    "lp-tcell lp-tcell-center " +
+                    (row.gold ? "lp-td-prop-gold" : "lp-td-prop")
+                  }
+                >
+                  {row.propmate}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ---------- SECTION 5 — Testimonials ---------- */}
+      <section className="lp-section lp-testimonials">
+        <div className="lp-section-inner">
+          <div className="lp-eyebrow">REAL LANDLORDS</div>
+          <h2 className="lp-title">
+            Loved by property managers across the world
+          </h2>
+          <p className="lp-subtitle">
+            From independent landlords to full agencies managing hundreds of
+            doors.
+          </p>
+
+          <div className="lp-grid-3">
+            {TESTIMONIALS.map((testimonial) => (
+              <div key={testimonial.name} className="lp-tcard">
+                <div className="lp-stars">★★★★★</div>
+                <p className="lp-quote">{testimonial.quote}</p>
+                <div className="lp-person">
+                  <div
+                    className="lp-avatar"
+                    style={{
+                      background: testimonial.avatarBg,
+                      color: testimonial.avatarColor,
+                    }}
+                  >
+                    {testimonial.initials}
+                  </div>
+                  <div>
+                    <div className="lp-person-name">{testimonial.name}</div>
+                    <div className="lp-person-role">{testimonial.role}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ---------- SECTION 6 — Final CTA ---------- */}
+      <section className="lp-finalcta">
+        <h2>
+          Ready to manage smarter, not{" "}
+          <span className="lp-finalcta-blue">harder?</span>
+        </h2>
+        <p>
+          Join landlords across 40+ countries. Start free — upgrade when
+          you&apos;re ready.
+        </p>
+        <div className="lp-cta-row" style={{ marginBottom: 0 }}>
+          <Link href="/register" className="lp-btn-gold">
+            Start free today
+          </Link>
+          <Link href="/pricing" className="lp-btn-outline">
+            View pricing
+          </Link>
+        </div>
+      </section>
+
+      {/* ---------- SECTION 7 — Footer ---------- */}
+      <footer className="lp-footer">
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <div className="lp-logo">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 32 32"
+              width={26}
+              height={26}
+              aria-hidden="true"
+            >
+              <rect x="8" y="11" width="4" height="17" rx="1" fill="#4A9EFF" opacity="0.5" />
+              <rect x="14" y="8" width="5" height="20" rx="1" fill="#4A9EFF" opacity="0.75" />
+              <rect x="21" y="11" width="4" height="17" rx="1" fill="#4A9EFF" opacity="0.5" />
+              <rect x="13" y="6" width="7" height="22" rx="2" fill="#4A9EFF" />
+              <circle cx="16" cy="4" r="2.5" fill="#F5C842" />
+            </svg>
+            <span className="lp-logo-word">
+              Prop<span className="lp-logo-mate">Mate</span>
+              <span className="lp-logo-ai">AI</span>
+            </span>
+          </div>
+          <span className="lp-footer-copy">
+            © 2026 PropMate AI · FrictionLab LLC · All rights reserved
+          </span>
+        </div>
+
+        <div className="lp-footer-links">
+          <button className="lp-footer-link" onClick={() => setActiveModal("privacy")}>
+            Privacy Policy
+          </button>
+          <button className="lp-footer-link" onClick={() => setActiveModal("terms")}>
+            Terms of Service
+          </button>
+          <button className="lp-footer-link" onClick={() => setActiveModal("blog")}>
+            Blog
+          </button>
+          <button className="lp-footer-link" onClick={() => setActiveModal("support")}>
+            Support
+          </button>
+        </div>
+      </footer>
+
+      {/* ---------- MODALS ---------- */}
+      {activeModal !== null && (
         <div
-          className={
-            "fixed right-6 top-6 z-50 rounded-xl px-6 py-4 text-white shadow-2xl " +
-            (notification.type === "success" ? "bg-green-600" : "bg-red-600")
-          }
+          className="lp-modal-backdrop"
+          onClick={() => setActiveModal(null)}
         >
-          {notification.type === "success" ? "✅ " : "❌ "}
-          {notification.message}
-        </div>
-      )}
-
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <Logo theme="dark" size="md" />
-            <h1 className="mt-1 text-3xl font-bold">Dashboard</h1>
-            <p className="mt-2 text-zinc-500 dark:text-zinc-400">
-              Welcome back, {userName}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
+          {/* Stop clicks inside the modal from closing it via the backdrop handler. */}
+          <div className="lp-modal" onClick={(event) => event.stopPropagation()}>
             <button
-              onClick={() => router.push("/tenants")}
-              className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700"
+              className="lp-modal-close"
+              onClick={() => setActiveModal(null)}
+              aria-label="Close"
             >
-              Tenants
+              ✕
             </button>
-            <button
-              onClick={() => router.push("/leases")}
-              className="rounded-lg bg-purple-600 px-4 py-2 font-semibold text-white hover:bg-purple-700"
-            >
-              Leases
-            </button>
-            <button
-              onClick={() => router.push("/maintenance")}
-              className="rounded-lg bg-amber-600 px-4 py-2 font-semibold text-white hover:bg-amber-700"
-            >
-              Maintenance
-            </button>
-            <button
-              onClick={() => router.push("/ai")}
-              className="rounded-lg bg-violet-600 px-4 py-2 font-semibold text-white hover:bg-violet-700"
-            >
-              AI Features
-            </button>
-            {userRole === "admin" && (
-              <button
-                onClick={() => router.push("/admin")}
-                className="rounded-lg bg-rose-600 px-4 py-2 font-semibold text-white hover:bg-rose-700"
-              >
-                Admin
-              </button>
-            )}
-            <button
-              onClick={handleLogout}
-              className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
 
-        <div className="grid gap-6 md:grid-cols-3">
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-            <h2 className="text-lg font-semibold">Total Properties</h2>
-            <p className="mt-4 text-3xl font-bold text-blue-500">
-              {totalProperties}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-            <h2 className="text-lg font-semibold">Occupied Units</h2>
-            <p className="mt-4 text-3xl font-bold text-green-500">
-              {occupiedUnits}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-            <h2 className="text-lg font-semibold">Vacant Units</h2>
-            <p className="mt-4 text-3xl font-bold text-yellow-500">
-              {vacantUnits}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-8 grid gap-6 md:grid-cols-3">
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-            <h2 className="text-lg font-semibold">Portfolio Value</h2>
-            <p className="mt-4 text-3xl font-bold text-purple-500">
-              {formatAmount(totalPortfolioValue)}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-            <h2 className="text-lg font-semibold">Highest Priced Property</h2>
-            <p className="mt-4 text-lg font-bold text-emerald-500">
-              {highestPricedProperty
-                ? highestPricedProperty.title
-                : "No data yet"}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-            <h2 className="text-lg font-semibold">Vacancy Rate</h2>
-            <p className="mt-4 text-3xl font-bold text-rose-500">
-              {vacancyRate}%
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-8 rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="mb-2 text-xl font-bold">AI Insights</h2>
-          <p className="text-zinc-600 dark:text-zinc-400">{insightMessage}</p>
-        </div>
-
-        {/* ANALYTICS SECTION */}
-        <AnalyticsSection properties={properties} />
-
-        <div className="mt-8 rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-bold">
-              {editingId ? "Edit Property" : "Add Property"}
-            </h2>
-            {editingId && (
-              <button
-                onClick={resetForm}
-                className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-semibold hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-              >
-                Cancel Edit
-              </button>
-            )}
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <input
-              type="text"
-              placeholder="Property Title"
-              className="rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="Location"
-              className="rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="Full Address"
-              className="rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="City"
-              className="rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="Country"
-              className="rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-            />
-            <input
-              type="number"
-              placeholder="Price"
-              className="rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-            />
-            <select
-              className="rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-            >
-              <option value="USD">USD</option>
-              <option value="EUR">EUR</option>
-              <option value="TRY">TRY</option>
-              <option value="BDT">BDT</option>
-            </select>
-            <select
-              className="rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-              value={status}
-              onChange={(e) =>
-                setStatus(e.target.value as "occupied" | "vacant")
-              }
-            >
-              <option value="vacant">Vacant</option>
-              <option value="occupied">Occupied</option>
-            </select>
-          </div>
-
-          <div className="mt-4">
-            <label className="mb-2 block text-sm font-semibold text-zinc-600 dark:text-zinc-400">
-              {editingId
-                ? "Upload new images to replace existing ones (max 20)"
-                : "Upload property images (max 20)"}
-            </label>
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              className="w-full rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-              onChange={handleImageChange}
-            />
-            {previewUrls.length > 0 && (
-              <div className="mt-4">
-                <p className="mb-2 text-sm font-semibold text-zinc-600 dark:text-zinc-400">
-                  {previewUrls.length} image{previewUrls.length > 1 ? "s" : ""}{" "}
-                  selected — preview:
+            {/* Privacy Policy */}
+            {activeModal === "privacy" && (
+              <>
+                <h2 className="lp-modal-title">Privacy Policy</h2>
+                <p className="lp-modal-sub">
+                  Last updated: June 14, 2026 · FrictionLab LLC
                 </p>
-                <div className="grid grid-cols-4 gap-3 sm:grid-cols-6 md:grid-cols-8">
-                  {previewUrls.map((url, index) => (
-                    <div key={index} className="relative">
-                      <img
-                        src={url}
-                        alt={"Preview " + (index + 1)}
-                        className="h-20 w-full cursor-pointer rounded-lg border border-zinc-300 object-cover dark:border-zinc-600 hover:opacity-80 transition"
-                        onClick={() => setLightboxImage(url)}
-                      />
-                      <span className="absolute bottom-1 right-1 rounded bg-black bg-opacity-60 px-1 text-xs text-white">
-                        {index + 1}
-                      </span>
+
+                <h3 className="lp-modal-h3">Information we collect</h3>
+                <p className="lp-modal-p">
+                  We collect your name, email, and password when you create an
+                  account, along with the property and tenant data you choose to
+                  add. This information is stored securely on MongoDB Atlas.
+                </p>
+
+                <h3 className="lp-modal-h3">How we use your information</h3>
+                <p className="lp-modal-p">
+                  We use your information only to provide the PropMate AI service.
+                  AI insights are generated using only the data you submit. We
+                  never sell your data to third parties.
+                </p>
+
+                <h3 className="lp-modal-h3">Third-party services</h3>
+                <p className="lp-modal-p">
+                  We rely on trusted providers to power certain features:
+                  Cloudinary (image hosting), Stripe (payments), Resend (email),
+                  Twilio (SMS), and Google Maps / Calendar APIs.
+                </p>
+
+                <h3 className="lp-modal-h3">Data retention</h3>
+                <p className="lp-modal-p">
+                  Your data is retained while your account is active. On request
+                  to support@propmateai.com, we will delete your data within 30
+                  days.
+                </p>
+
+                <h3 className="lp-modal-h3">Security</h3>
+                <p className="lp-modal-p">
+                  We protect your data with SSL encryption, JWT authentication,
+                  MongoDB Atlas, and bcrypt password hashing.
+                </p>
+
+                <h3 className="lp-modal-h3">Contact</h3>
+                <p className="lp-modal-p">
+                  privacy@propmateai.com · FrictionLab LLC, Dhaka, Bangladesh
+                </p>
+              </>
+            )}
+
+            {/* Terms of Service */}
+            {activeModal === "terms" && (
+              <>
+                <h2 className="lp-modal-title">Terms of Service</h2>
+                <p className="lp-modal-sub">
+                  Last updated: June 14, 2026 · FrictionLab LLC
+                </p>
+
+                <h3 className="lp-modal-h3">Acceptance of terms</h3>
+                <p className="lp-modal-p">
+                  By creating an account you agree to these terms. We will give
+                  you 14 days notice before any updates take effect.
+                </p>
+
+                <h3 className="lp-modal-h3">Your account</h3>
+                <p className="lp-modal-p">
+                  You are responsible for keeping your login credentials secure
+                  and for all activity under your account.
+                </p>
+
+                <h3 className="lp-modal-h3">Acceptable use</h3>
+                <p className="lp-modal-p">
+                  PropMate AI may be used for lawful property management only. No
+                  harassment, illegal content, or misuse of the platform is
+                  permitted.
+                </p>
+
+                <h3 className="lp-modal-h3">Subscription and billing</h3>
+                <p className="lp-modal-p">
+                  Plans are billed monthly or annually via Stripe. You may cancel
+                  anytime. We do not offer partial refunds.
+                </p>
+
+                <h3 className="lp-modal-h3">Service availability</h3>
+                <p className="lp-modal-p">
+                  We target 99.9% uptime and will provide 24 hours notice before
+                  any planned maintenance.
+                </p>
+
+                <h3 className="lp-modal-h3">Limitation of liability</h3>
+                <p className="lp-modal-p">
+                  We are not liable for indirect damages. Our total liability is
+                  capped at the amount you paid in the previous 12 months.
+                </p>
+
+                <h3 className="lp-modal-h3">Contact</h3>
+                <p className="lp-modal-p">legal@propmateai.com</p>
+              </>
+            )}
+
+            {/* Blog */}
+            {activeModal === "blog" && (
+              <>
+                <h2 className="lp-modal-title">PropMate AI Blog</h2>
+                <p className="lp-modal-sub">
+                  Insights on property management, AI, and growing your
+                  portfolio.
+                </p>
+
+                <div className="lp-modal-grid">
+                  {BLOG_POSTS.map((post) => (
+                    <div key={post.title} className="lp-blog-card">
+                      <div className="lp-blog-tag">{post.tag}</div>
+                      <div className="lp-blog-title">{post.title}</div>
+                      <div className="lp-blog-date">{post.date}</div>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* UNSPLASH STOCK PHOTOS */}
-          <div
-            style={{
-              marginTop: "16px",
-              background: "#0F1A2E",
-              border: "1px solid #1A2D4A",
-              borderRadius: "12px",
-              padding: "16px",
-            }}
-          >
-            <p
-              style={{
-                color: "#8AB4D4",
-                fontSize: "13px",
-                fontWeight: 600,
-                marginBottom: "10px",
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-              }}
-            >
-              Or pick stock photos from Unsplash
-            </p>
-            <div style={{ display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
-              {["Modern Home", "Apartment", "Office Space"].map((kw) => (
-                <button
-                  key={kw}
-                  type="button"
-                  onClick={() => fetchUnsplashPhotos(kw)}
-                  style={{
-                    background: "#1A2D4A",
-                    color: "#FFFFFF",
-                    border: "1px solid #2A3D5A",
-                    borderRadius: "8px",
-                    padding: "6px 14px",
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    cursor: "pointer",
-                  }}
-                >
-                  {kw}
-                </button>
-              ))}
-            </div>
-
-            {unsplashLoading && (
-              <p style={{ color: "#8AB4D4", fontSize: "13px" }}>Loading photos...</p>
+              </>
             )}
 
-            {unsplashResults.length > 0 && (
+            {/* Support */}
+            {activeModal === "support" && (
               <>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(3, 1fr)",
-                    gap: "8px",
-                    marginBottom: "10px",
-                  }}
-                >
-                  {unsplashResults.slice(0, 9).map((photo) => {
-                    const selected = stockPhotoUrls.includes(photo.url);
-                    return (
-                      <div
-                        key={photo.id}
-                        onClick={() => toggleStockPhoto(photo.url)}
-                        style={{
-                          position: "relative",
-                          cursor: "pointer",
-                          borderRadius: "8px",
-                          overflow: "hidden",
-                          border: selected ? "2px solid #4A9EFF" : "2px solid transparent",
-                          transition: "border-color 0.15s",
-                        }}
-                      >
-                        <img
-                          src={photo.thumb}
-                          alt={photo.photographer}
-                          style={{ width: "100%", height: "80px", objectFit: "cover", display: "block" }}
-                        />
-                        {selected && (
-                          <div
-                            style={{
-                              position: "absolute",
-                              top: "4px",
-                              right: "4px",
-                              background: "#4A9EFF",
-                              borderRadius: "50%",
-                              width: "20px",
-                              height: "20px",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              fontSize: "11px",
-                              color: "#fff",
-                              fontWeight: 700,
-                            }}
-                          >
-                            ✓
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                {stockPhotoUrls.length > 0 && (
-                  <p style={{ color: "#4A9EFF", fontSize: "13px" }}>
-                    {stockPhotoUrls.length} stock photo{stockPhotoUrls.length > 1 ? "s" : ""} selected
-                  </p>
-                )}
+                <h2 className="lp-modal-title">Support Center</h2>
+                <p className="lp-modal-sub">
+                  Get help with PropMate AI · Email: support@propmateai.com
+                </p>
+
+                {FAQS.map((faq) => (
+                  <div key={faq.q} className="lp-faq">
+                    <p className="lp-faq-q">{faq.q}</p>
+                    <p className="lp-faq-a">{faq.a}</p>
+                  </div>
+                ))}
               </>
             )}
           </div>
-
-          <button
-            onClick={handleAddOrUpdateProperty}
-            disabled={submitting}
-            className="mt-6 rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            {submitting
-              ? editingId
-                ? "Updating..."
-                : "Adding..."
-              : editingId
-                ? "Update Property"
-                : "Add Property"}
-          </button>
         </div>
-
-        <div className="mt-8 rounded-2xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-xl font-bold">Recent Properties</h2>
-            <div className="flex flex-col gap-3 md:flex-row">
-              <input
-                type="text"
-                placeholder="Search properties..."
-                className="w-full rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white md:w-72"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <select
-                className="rounded-lg border border-zinc-300 bg-zinc-50 p-3 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-              >
-                <option value="all">All</option>
-                <option value="vacant">Vacant</option>
-                <option value="occupied">Occupied</option>
-              </select>
-            </div>
-          </div>
-
-          {filteredProperties.length === 0 ? (
-            <p className="text-zinc-500 dark:text-zinc-400">
-              No properties found yet.
-            </p>
-          ) : (
-            <div className="space-y-6">
-              {filteredProperties.map((property) => {
-                const mapsUrl =
-                  "https://www.google.com/maps?q=" +
-                  String(property.latitude) +
-                  "," +
-                  String(property.longitude);
-                const hasCoords =
-                  property.latitude != null && property.longitude != null;
-                const addressLine = [
-                  property.address,
-                  property.city,
-                  property.country,
-                ]
-                  .filter(Boolean)
-                  .join(", ");
-                const hasAddress = Boolean(
-                  property.address || property.city || property.country,
-                );
-                const imageCount = property.images ? property.images.length : 0;
-                return (
-                  <div
-                    key={property._id}
-                    className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700"
-                  >
-                    <div className="flex flex-col gap-4">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-lg font-semibold">
-                              {property.title}
-                            </h3>
-                            {imageCount > 0 && (
-                              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-600 dark:bg-blue-900 dark:text-blue-300">
-                                {imageCount} photo{imageCount > 1 ? "s" : ""}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                            {property.location}
-                          </p>
-                          {hasAddress && (
-                            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                              {addressLine}
-                            </p>
-                          )}
-                          {hasCoords && (
-                            <a
-                              href={mapsUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="mt-2 inline-block text-sm text-blue-500 underline"
-                            >
-                              View on Map
-                            </a>
-                          )}
-                        </div>
-                        <div className="text-sm">
-                          <p>
-                            <span className="font-semibold">Price: </span>
-                            {formatAmount(property.price)}
-                          </p>
-                          <p>
-                            <span className="font-semibold">Status: </span>
-                            <span
-                              className={
-                                property.status === "occupied"
-                                  ? "font-semibold text-green-500"
-                                  : "font-semibold text-yellow-500"
-                              }
-                            >
-                              {property.status}
-                            </span>
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() =>
-                              router.push("/property/" + property._id)
-                            }
-                            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                          >
-                            View
-                          </button>
-                          <button
-                            onClick={() => handleEditProperty(property)}
-                            className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteProperty(property._id)}
-                            disabled={deletingId === property._id}
-                            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
-                          >
-                            {deletingId === property._id
-                              ? "Deleting..."
-                              : "Delete"}
-                          </button>
-                        </div>
-                      </div>
-                      {property.images && property.images.length > 0 && (
-                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-                          {property.images.map((image, index) => (
-                            <div
-                              key={index}
-                              className="relative group cursor-pointer"
-                              onClick={() =>
-                                setLightboxImage(
-                                  image.startsWith("http")
-                                    ? image
-                                    : process.env.NEXT_PUBLIC_API_URL + image,
-                                )
-                              }
-                            >
-                              <img
-                                src={
-                                    image.startsWith("http")
-                                      ? image
-                                      : process.env.NEXT_PUBLIC_API_URL + image
-                                  }
-                                alt={property.title + " " + (index + 1)}
-                                className="h-24 w-full rounded-lg border border-zinc-200 object-cover dark:border-zinc-700 group-hover:opacity-80 transition"
-                              />
-                              <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black bg-opacity-0 group-hover:bg-opacity-30 transition">
-                                <span className="text-xl text-white opacity-0 group-hover:opacity-100 transition">
-                                  🔍
-                                </span>
-                              </div>
-                              {index === 0 && (
-                                <span className="absolute left-1 top-1 rounded bg-blue-600 px-1.5 py-0.5 text-xs font-bold text-white">
-                                  Main
-                                </span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
